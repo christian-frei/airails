@@ -1,12 +1,15 @@
 ---
 name: ears-tests
-description: Generate parameterized (table-driven) tests from EARS requirement statements — the deterministic transform that turns an SBCE capability spec's `## Requirements` into one parameterized test per requirement group and one labeled row per statement id. Stack-neutral; owns only the EARS→table mapping and the spec↔test trace, and delegates the test syntax to the composed stack skill (JUnit 5, zunit, Playwright). Use whenever turning EARS requirements, acceptance criteria, or an SBCE/`/sbce` spec into tests; whenever you see "When/While/If…then, the … shall …" statements that need covering; or when asked for table-driven, data-driven, or parameterized tests from a requirement group. Triggers on "EARS", "parameterized tests", "table-driven tests", "data-driven tests", "tests from requirements", "tests from the spec", "cover requirement Rn", "generate tests for this capability", "acceptance criteria to tests".
+description: Generate parameterized (table-driven) tests from EARS requirement statements — the deterministic transform that turns an SBCE capability spec's `## Requirements` into one parameterized test per requirement group and one labeled row per statement id. Stack-neutral; owns only the EARS→table mapping and the spec↔test trace, and delegates the test syntax to the composed stack skill (JUnit 5, zunit, Playwright). Use whenever turning EARS requirements, acceptance criteria, or an SBCE/`/sbce` spec into tests; whenever you see "When/While/If…then, the … shall …" statements that need covering; or when asked for table-driven, data-driven, or parameterized tests from a requirement group. Triggers on "EARS", "parameterized tests", "table-driven tests", "data-driven tests", "tests from requirements", "tests from the spec", "cover requirement Rn", "generate tests for this capability", "acceptance criteria to tests". Also owns `review` — a stack-free check of EARS statements in a plain requirements Markdown file or capability spec, reporting per statement id whether it can become a test row (pattern match, measurable response, one trigger per statement, missing rejection paths, duplicate or missing ids) while generating no code and asking nothing about the stack. Triggers additionally on "review my requirements", "check these EARS statements", "are these requirements testable", "requirements review", "/ears-spec check".
 ---
 
 Turn EARS requirement statements into parameterized tests. The leverage is structural: every
 EARS pattern is a `(condition → response)` tuple, and an SBCE requirement **group** already
 collects statements that share **one boundary operation** — same arrange/act skeleton, only the
 data differs. That is the textbook precondition for parameterization, so the mapping is mechanical.
+
+Two uses, one mapping. **generate** (the default) emits the tests; **review** reads statements and
+reports whether each one *could* become a row, emitting nothing — see the mode below.
 
 Own only the **transform and the trace**. The concrete test syntax is the composed stack skill's
 call — never name a runner or framework verb here. When the generated tests exercise the running
@@ -39,6 +42,25 @@ The system is always **the BC**. Each pattern decomposes into the arrange/act/as
 Mixing a happy `When` row and an unhappy `If…then` row in the same group's table is the norm — it is
 how one parameterized method covers both the success and the rejection path of one boundary op.
 
+## review — testability check, no code
+
+`/ears-tests review <file>` reads EARS statements from a plain Markdown file — a business feature
+request, or a capability spec's `## Requirements` — and reports, per statement id, whether it can
+become a row. It is the same mapping read backwards: a statement that cannot be placed in the
+row-shape table above cannot be tested, and that is worth knowing **before** anyone writes code.
+
+Hard rules for this mode:
+
+- **Emit nothing.** No test file, no scaffolding, no edit to the reviewed file. The report is the output.
+- **Ask nothing technical.** No stack, no runner, no framework, no repository — review runs where
+  none of those exist. The audience is often the requirement's author, not a developer.
+- **Judge the statement, never the design.** "This should be two components", "use a queue here" —
+  out of scope. The only question is: could this be tested as written?
+- **Never rewrite silently.** Propose a corrected wording as a suggestion; the author owns the text.
+
+The concrete checks, their severities and the report format: `references/review-checklist.md`.
+Severities are `blocker` (cannot become a row), `warn` (a row is possible but weak) and `info`.
+
 ## Deterministic vs. authored
 
 EARS hands you the *enumeration*, not the *data*. Keep the two honestly separated so the generated
@@ -69,5 +91,7 @@ never introduce a second test idiom.
   step is realized when a group has ≥2 statements.
 - **`/bce`** owns where tests and the BC live; the **stack skill** owns the test syntax and the
   "are you green?" oracle.
+- **`/ears-spec`** (business-facing authoring) calls `review` as its pre-send `check`. That call
+  arrives with no repository and no stack in reach — which is why `review` may never depend on either.
 - Prefer a parameterized method only when a group has **≥2 statements**; a lone statement is a plain
   test — do not force a one-row table.

@@ -1,0 +1,824 @@
+#!/usr/bin/env -S java --source 25
+
+/// onepager — turn an EARS spec into a one-pager: a derived process drawing on the left,
+/// the EARS statements on the right, linked by requirement id and colour.
+///
+/// Emits `<name>.excalidraw` (editable) and `<name>.html` (print to PDF). Deterministic:
+/// the same input produces byte-identical output — element ids are content hashes and
+/// nothing is timestamped, so regeneration produces a clean diff.
+///
+/// Zero dependencies. Part of the ears-onepager skill; written against the Excalidraw
+/// file format, not derived from any third-party implementation.
+
+String NAME = "onepager";
+String VERSION = "2026-08-26.1";
+
+// ------------------------------------------------------------------ model
+
+enum Pat { EVENT, UNWANTED, STATE, COMPLEX, OPTIONAL, UBIQUITOUS }
+
+record Stmt(String id, String text, Pat pat, String cond, String response) {}
+
+record Group(String id, String title, List<Stmt> stmts) {
+    List<Stmt> guards() { return stmts.stream().filter(s -> s.pat() == Pat.UNWANTED).toList(); }
+    List<Stmt> happy() { return stmts.stream().filter(s -> s.pat() != Pat.UNWANTED).toList(); }
+}
+
+record Op(String name, String desc) {}
+
+record Spec(String title, String oneLiner, String meta, List<Op> ops, List<Group> groups) {}
+
+// ------------------------------------------------------------------ parsing
+
+List<String> readBody(Path file) throws IOException {
+    var out = new ArrayList<String>();
+    for (var raw : Files.readAllLines(file)) {
+        var t = raw.stripTrailing();
+        var s = t.stripLeading();
+        if (s.startsWith("package ") && s.endsWith(";")) break;
+        if (s.startsWith("///")) {
+            t = s.substring(3);
+            if (t.startsWith(" ")) t = t.substring(1);
+        }
+        out.add(t);
+    }
+    return out;
+}
+
+String stripMarkers(String s) {
+    var t = s;
+    for (var key : List.of("why", "from")) {
+        var open = "_(" + key + ":";
+        int i;
+        while ((i = t.indexOf(open)) >= 0) {
+            int j = t.indexOf(")_", i);
+            if (j < 0) break;
+            t = (t.substring(0, i) + t.substring(j + 2)).stripTrailing();
+        }
+    }
+    return t.trim();
+}
+
+Stmt classify(String id, String raw) {
+    var t = stripMarkers(raw);
+    if (t.endsWith(".")) t = t.substring(0, t.length() - 1);
+    var lw = t.toLowerCase();
+    var pat = lw.startsWith("while ") && lw.contains(", when ") ? Pat.COMPLEX
+            : lw.startsWith("while ") ? Pat.STATE
+            : lw.startsWith("when ") ? Pat.EVENT
+            : lw.startsWith("if ") ? Pat.UNWANTED
+            : lw.startsWith("where ") ? Pat.OPTIONAL
+            : Pat.UBIQUITOUS;
+    int sh = t.indexOf(" shall ");
+    var response = sh < 0 ? t : t.substring(sh + 7).trim();
+    var head = sh < 0 ? "" : t.substring(0, sh);
+    int subject = head.lastIndexOf(" the ");
+    var cond = subject > 0 ? head.substring(0, subject).trim() : "";
+    cond = trimTail(cond, ",");
+    cond = trimTail(cond, " then");
+    cond = trimTail(cond, ",");
+    cond = switch (pat) {
+        case UNWANTED -> cond.length() > 3 ? cond.substring(3) : cond;
+        case EVENT -> cond.length() > 5 ? cond.substring(5) : cond;
+        case STATE, COMPLEX, OPTIONAL -> cond.length() > 6 ? cond.substring(6) : cond;
+        case UBIQUITOUS -> "";
+    };
+    return new Stmt(id, t, pat, cond.trim(), response);
+}
+
+String trimTail(String s, String tail) {
+    return s.toLowerCase().endsWith(tail) ? s.substring(0, s.length() - tail.length()).trim() : s;
+}
+
+Spec parseSpec(Path file) throws IOException {
+    var lines = readBody(file);
+    String title = null, oneLiner = null, meta = "";
+    var ops = new ArrayList<Op>();
+    var groups = new ArrayList<Group>();
+    var front = new LinkedHashMap<String, String>();
+    int i = 0;
+    if (!lines.isEmpty() && lines.get(0).trim().equals("---")) {
+        for (i = 1; i < lines.size() && !lines.get(i).trim().equals("---"); i++) {
+            int c = lines.get(i).indexOf(':');
+            if (c > 0) front.put(lines.get(i).substring(0, c).trim(), lines.get(i).substring(c + 1).trim());
+        }
+        i++;
+    }
+    var section = "";
+    String gId = null, gTitle = null;
+    var gStmts = new ArrayList<Stmt>();
+    for (; i < lines.size(); i++) {
+        var line = lines.get(i);
+        var t = line.trim();
+        if (t.startsWith("<!--") || t.isEmpty()) continue;
+        if (t.startsWith("# ")) { title = t.substring(2).trim(); continue; }
+        if (t.startsWith("> ") && oneLiner == null) { oneLiner = t.substring(2).trim(); continue; }
+        if (t.startsWith("## ")) {
+            if (gId != null) { groups.add(new Group(gId, gTitle, List.copyOf(gStmts))); gId = null; gStmts.clear(); }
+            section = t.substring(3).trim().toLowerCase();
+            continue;
+        }
+        if (t.startsWith("### ")) {
+            if (gId != null) { groups.add(new Group(gId, gTitle, List.copyOf(gStmts))); gStmts.clear(); }
+            var h = t.substring(4).trim();
+            int c = h.indexOf(':');
+            gId = (c > 0 ? h.substring(0, c) : h).trim();
+            gTitle = c > 0 ? h.substring(c + 1).trim() : "";
+            continue;
+        }
+        if (!t.startsWith("- ")) continue;
+        var item = t.substring(2).trim();
+        if (section.equals("boundary") || section.equals("operations")) {
+            var name = item;
+            var desc = "";
+            if (item.startsWith("`")) {
+                int q = item.indexOf('`', 1);
+                if (q > 0) {
+                    name = item.substring(1, q);
+                    desc = item.substring(q + 1).replaceFirst("^\\s*[—–-]\\s*", "").trim();
+                }
+            }
+            ops.add(new Op(name, desc));
+        } else if (section.startsWith("requirement") && gId != null) {
+            var m = java.util.regex.Pattern
+                    .compile("^(R\\d+\\.\\d+)\\s*[—–:-]\\s*(.+)$").matcher(item);
+            if (m.matches()) gStmts.add(classify(m.group(1), m.group(2)));
+        }
+    }
+    if (gId != null) groups.add(new Group(gId, gTitle, List.copyOf(gStmts)));
+    if (title == null) title = front.getOrDefault("title", baseName(file));
+    if (front.containsKey("revision")) meta = "revision " + front.get("revision");
+    if (front.containsKey("date")) meta = meta.isEmpty() ? front.get("date") : meta + " · " + front.get("date");
+    return new Spec(title, oneLiner == null ? "" : oneLiner, meta, ops, groups);
+}
+
+String baseName(Path p) {
+    var n = p.getFileName().toString();
+    if (n.startsWith("package-info")) {
+        var d = p.getParent();
+        return d == null ? n : d.getFileName().toString();
+    }
+    int dot = n.lastIndexOf('.');
+    return dot > 0 ? n.substring(0, dot) : n;
+}
+
+// ------------------------------------------------------------------ canvas
+
+static class Shape {
+    String kind = "rect";          // rect ellipse diamond arrow dash text chip
+    double x, y, w, h;
+    List<String> lines = new ArrayList<>();
+    String tag = "";
+    String stroke = "#1e1e1e";
+    String fill = "transparent";
+    int font = 16;
+    int family = 2;                 // 1 = hand-drawn, 2 = sans
+    boolean bold = false;
+    String align = "center";
+    String key = "";
+}
+
+List<Shape> canvas = new ArrayList<>();
+
+double LEFT_X = 40, LEFT_W = 900, RIGHT_X = 990, RIGHT_W = 630, PAGE_W = 1660;
+
+/// Palette — Excalidraw's own element colours, one dark tone and one tint per family.
+/// To rebrand, replace these values and the roles below follow; see references/palette.md.
+String BLUE = "#1971c2", BLUE_TINT = "#a5d8ff";
+String AMBER = "#f08c00", AMBER_TINT = "#ffec99";
+String RED = "#e03131", RED_TINT = "#ffc9c9";
+String GREEN = "#2f9e44", GREEN_TINT = "#b2f2bb";
+String GREY = "#868e96", GREY_TINT = "#e9ecef";
+String VIOLET = "#6741d9", TEAL = "#0c8599", MAGENTA = "#c2255c", ORANGE = "#e8590c";
+String CHARCOAL = "#1e1e1e", SLATE = "#495057", HAIRLINE = "#ced4da";
+
+/// Semantic roles — change a role here, never a hex at a call site.
+String INK = CHARCOAL, MUTED = GREY, TITLE = CHARCOAL, PAPER = "#ffffff";
+String[] HUE = {BLUE, VIOLET, MAGENTA, TEAL, ORANGE, GREEN};
+
+/// Output is drawn flat so the .excalidraw and the printed PDF match;
+/// --sketch restores Excalidraw's hand-drawn look.
+int ROUGHNESS = 0, FACE = 2;
+
+Shape add(String kind, double x, double y, double w, double h) {
+    var s = new Shape();
+    s.kind = kind; s.family = FACE; s.x = x; s.y = y; s.w = w; s.h = h;
+    s.key = kind + "@" + Math.round(x) + "," + Math.round(y) + "," + canvas.size();
+    canvas.add(s);
+    return s;
+}
+
+Shape box(String kind, double x, double y, double w, double h, String text, String stroke, String fill, int font) {
+    var s = add(kind, x, y, w, h);
+    s.stroke = stroke; s.fill = fill; s.font = font;
+    s.lines = wrap(text, (int) ((w - 16) / (font * 0.52)));
+    return s;
+}
+
+Shape boxWith(String kind, double x, double y, double w, double h, List<String> lines,
+              String stroke, String fill, int font) {
+    var s = add(kind, x, y, w, h);
+    s.stroke = stroke; s.fill = fill; s.font = font; s.lines = lines;
+    return s;
+}
+
+/// A diamond's usable width shrinks towards its points, so wrap to ~62% of the bounding box
+/// and let the shape grow taller rather than letting text escape it.
+List<String> diamondLines(String text, double w, int font) {
+    var lines = wrap(text, (int) ((w * 0.62) / (font * 0.52)));
+    if (lines.size() > 5) {
+        lines = new ArrayList<>(lines.subList(0, 5));
+        lines.set(4, lines.get(4) + "…");
+    }
+    return lines;
+}
+
+Shape text(double x, double y, double w, String text, int font, int family, String colour, String align) {
+    var s = add("text", x, y, w, font * 1.3);
+    s.stroke = colour; s.font = font; s.family = family; s.align = align;
+    s.lines = wrap(text, (int) (w / (font * 0.52)));
+    s.h = s.lines.size() * font * 1.3;
+    return s;
+}
+
+Shape arrow(double x1, double y1, double x2, double y2, String colour, boolean dashed) {
+    var s = add(dashed ? "dash" : "arrow", x1, y1, x2 - x1, y2 - y1);
+    s.stroke = colour;
+    return s;
+}
+
+Shape rule(double x1, double y1, double x2, String colour) {
+    var s = add("rule", x1, y1, x2 - x1, 0);
+    s.stroke = colour;
+    return s;
+}
+
+List<String> wrap(String text, int max) {
+    var out = new ArrayList<String>();
+    if (text == null || text.isBlank()) return out;
+    if (max < 6) max = 6;
+    var line = new StringBuilder();
+    for (var word : text.trim().split("\\s+")) {
+        if (line.isEmpty()) line.append(word);
+        else if (line.length() + 1 + word.length() <= max) line.append(' ').append(word);
+        else { out.add(line.toString()); line = new StringBuilder(word); }
+    }
+    if (!line.isEmpty()) out.add(line.toString());
+    return out;
+}
+
+String sentence(String s) {
+    if (s == null || s.isBlank()) return "";
+    return Character.toUpperCase(s.charAt(0)) + s.substring(1);
+}
+
+// ------------------------------------------------------------------ layout: one capability
+
+double header(Spec spec, String kind) {
+    text(LEFT_X, 40, PAGE_W - 80, spec.title(), 30, FACE, TITLE, "left").bold = true;
+    double y = 86;
+    if (!spec.oneLiner().isBlank()) {
+        var s = text(LEFT_X, y, PAGE_W - 80, spec.oneLiner(), 16, FACE, SLATE, "left");
+        y += s.h + 6;
+    }
+    var stamp = kind + (spec.meta().isBlank() ? "" : " · " + spec.meta());
+    text(LEFT_X, y, PAGE_W - 80, stamp, 12, FACE, MUTED, "left");
+    rule(LEFT_X, 134, PAGE_W - 40, BLUE);
+    return 156;
+}
+
+double layoutCapability(Spec spec) {
+    double top = header(spec, "capability one-pager");
+    double y = top;
+    double ry = top;
+    var connectors = new ArrayList<double[]>();
+    var hues = new ArrayList<String>();
+
+    for (int g = 0; g < spec.groups().size(); g++) {
+        var group = spec.groups().get(g);
+        var hue = HUE[g % HUE.length];
+        hues.add(hue);
+        var guards = group.guards();
+        var happy = group.happy();
+        boolean hasGuards = !guards.isEmpty();
+        double cy = y + 34;
+
+        var chip = box("chip", LEFT_X, cy - 14, 52, 28, group.id(), hue, PAPER, 13);
+
+        double x = LEFT_X + 68;
+        var op = opFor(spec, g, group);
+        var opNode = box("ellipse", x, cy - 27, 140, 54, op, BLUE, BLUE_TINT, 13);
+        x += 140;
+
+        int shown = Math.min(guards.size(), 3);
+        double dw = 132, dh = 76;
+        int gfont = 11;
+        var guardText = new ArrayList<List<String>>();
+        for (int k = 0; k < shown; k++) {
+            var lines = diamondLines(sentence(guards.get(k).cond()) + "?", dw, gfont);
+            guardText.add(lines);
+            dh = Math.max(dh, lines.size() * gfont * 1.3 + 44);
+        }
+        cy = y + dh / 2 + 8;
+        chip.y = cy - 14;
+        opNode.y = cy - 27;
+        for (int k = 0; k < shown; k++) {
+            var guard = guards.get(k);
+            arrow(x, cy, x + 30, cy, INK, false);
+            x += 30;
+            var d = boxWith("diamond", x, cy - dh / 2, dw, dh, guardText.get(k), AMBER, AMBER_TINT, gfont);
+            d.tag = guard.id();
+            arrow(x + dw / 2, cy + dh / 2, x + dw / 2, cy + dh / 2 + 38, RED, false);
+            var r = box("rect", x + 1, cy + dh / 2 + 38, dw - 2, 46, sentence(guard.response()), RED, RED_TINT, 12);
+            r.tag = guard.id();
+            x += dw;
+        }
+        if (guards.size() > shown) {
+            text(LEFT_X + 68, cy + dh / 2 + 92, LEFT_W - 80,
+                    "+" + (guards.size() - shown) + " more If…then statement(s) — listed on the right",
+                    11, FACE, MUTED, "left");
+        }
+
+        arrow(x, cy, x + 30, cy, INK, false);
+        x += 30;
+        if (happy.isEmpty()) {
+            var n = box("rect", x, cy - 27, 168, 54, "no positive outcome declared", GREY, GREY_TINT, 11);
+            n.tag = "";
+        } else {
+            var o = box("rect", x, cy - 27, 168, 54, sentence(happy.getFirst().response()), GREEN, GREEN_TINT, 12);
+            o.tag = happy.stream().map(Stmt::id).collect(Collectors.joining(", "));
+        }
+        double rightEdge = x + 168;
+
+        // right column entry
+        var head = text(RIGHT_X, ry, RIGHT_W, group.id() + "  ·  " + group.title(), 15, FACE, hue, "left");
+        head.bold = true;
+        connectors.add(new double[]{rightEdge + 8, cy, RIGHT_X - 12, ry + 9});
+        ry += head.h + 8;
+        for (var st : group.stmts()) {
+            var idc = text(RIGHT_X, ry, 46, st.id(), 12, FACE, hue, "left");
+            var body = text(RIGHT_X + 52, ry, RIGHT_W - 52, st.text() + ".", 12, FACE, INK, "left");
+            idc.h = body.h;
+            ry += body.h + 7;
+        }
+        ry += 14;
+
+        y += hasGuards ? dh / 2 + 8 + dh / 2 + 38 + 46 + 46 : 100;
+    }
+
+    for (int k = 0; k < connectors.size(); k++) {
+        var c = connectors.get(k);
+        arrow(c[0], c[1], c[2], c[3], hues.get(k), true);
+    }
+
+    double bottom = Math.max(y, ry) + 20;
+    legend(bottom);
+    return bottom + 70;
+}
+
+String opFor(Spec spec, int index, Group group) {
+    if (index < spec.ops().size()) return spec.ops().get(index).name();
+    return group.title().isBlank() ? group.id() : group.title();
+}
+
+void legend(double y) {
+    text(LEFT_X, y, 200, "How to read this", 13, FACE, INK, "left").bold = true;
+    double x = LEFT_X;
+    var items = List.of(
+            new String[]{"ellipse", BLUE, BLUE_TINT, "operation"},
+            new String[]{"diamond", AMBER, AMBER_TINT, "If…then guard"},
+            new String[]{"rect", RED, RED_TINT, "refused"},
+            new String[]{"rect", GREEN, GREEN_TINT, "outcome"});
+    for (var it : items) {
+        box(it[0], x, y + 26, 26, 22, "", it[1], it[2], 10);
+        text(x + 32, y + 30, 130, it[3], 11, FACE, MUTED, "left");
+        x += 172;
+    }
+}
+
+// ------------------------------------------------------------------ layout: whole system
+
+record Bc(String name, String oneLiner, List<Group> groups) {}
+
+record Rect(double x, double y, double w, double h) {
+    double cx() { return x + w / 2; }
+    double cy() { return y + h / 2; }
+}
+
+/// Where the line from this box's centre towards (tx,ty) crosses its border, so edges
+/// stop at the shape instead of being drawn through it.
+double[] border(Rect r, double tx, double ty) {
+    double dx = tx - r.cx(), dy = ty - r.cy();
+    if (dx == 0 && dy == 0) return new double[]{r.cx(), r.cy()};
+    double t = Double.MAX_VALUE;
+    if (dx != 0) {
+        double c = (((dx > 0 ? r.x() + r.w() : r.x()) - r.cx()) / dx);
+        if (c > 0 && Math.abs(c * dy) <= r.h() / 2 + 0.01) t = Math.min(t, c);
+    }
+    if (dy != 0) {
+        double c = (((dy > 0 ? r.y() + r.h() : r.y()) - r.cy()) / dy);
+        if (c > 0 && Math.abs(c * dx) <= r.w() / 2 + 0.01) t = Math.min(t, c);
+    }
+    if (t == Double.MAX_VALUE) t = 0;
+    return new double[]{r.cx() + t * dx, r.cy() + t * dy};
+}
+
+/// Direction is read from the wording between the two component names — never guessed from
+/// their order. A bullet with no recognised relation word is reported, not invented.
+String[] edgeOf(String bullet) {
+    var names = ticked(bullet);
+    if (names.size() < 2) return null;
+    var a = names.get(0);
+    var b = names.get(1);
+    int i = bullet.indexOf("`" + a + "`");
+    int j = bullet.indexOf("`" + b + "`");
+    if (i < 0 || j < 0 || j <= i) return null;
+    var between = bullet.substring(i + a.length() + 2, j).toLowerCase();
+    if (between.contains("called by") || between.contains("reached") || between.contains("invoked by")
+            || between.contains("<-") || between.contains("←")) return new String[]{b, a};
+    if (between.contains("call") || between.contains("->") || between.contains("→")
+            || between.contains("notifies") || between.contains("publishes")) return new String[]{a, b};
+    return null;
+}
+
+double layoutSystem(String title, String oneLiner, String meta, List<Bc> bcs, List<String[]> edges) {
+    double top = header(new Spec(title, oneLiner, meta, List.of(), List.of()), "system one-pager");
+    var at = new LinkedHashMap<String, Rect>();
+    double y = top, colW = 290, rowH = 150;
+    int perRow = 3;
+    for (int i = 0; i < bcs.size(); i++) {
+        var bc = bcs.get(i);
+        double bx = LEFT_X + (i % perRow) * colW;
+        double by = top + (i / perRow) * rowH;
+        var hue = HUE[i % HUE.length];
+        box("rect", bx, by, 240, 86, "", hue, PAPER, 13);
+        text(bx + 12, by + 12, 216, bc.name(), 15, FACE, hue, "left").bold = true;
+        text(bx + 12, by + 38, 216, bc.oneLiner(), 11, FACE, SLATE, "left");
+        at.put(bc.name(), new Rect(bx, by, 240, 86));
+        y = Math.max(y, by + 86);
+    }
+    var drawn = new HashSet<String>();
+    for (var e : edges) {
+        var a = at.get(e[0]);
+        var b = at.get(e[1]);
+        if (a == null || b == null || !drawn.add(e[0] + ">" + e[1])) continue;
+        var p1 = border(a, b.cx(), b.cy());
+        var p2 = border(b, a.cx(), a.cy());
+        arrow(p1[0], p1[1], p2[0], p2[1], SLATE, false);
+    }
+    double ry = top;
+    for (int i = 0; i < bcs.size(); i++) {
+        var bc = bcs.get(i);
+        var hue = HUE[i % HUE.length];
+        var head = text(RIGHT_X, ry, RIGHT_W, bc.name(), 15, FACE, hue, "left");
+        head.bold = true;
+        ry += head.h + 6;
+        if (bc.groups().isEmpty()) {
+            var none = text(RIGHT_X + 8, ry, RIGHT_W - 8, "no requirement groups declared", 11, FACE, MUTED, "left");
+            ry += none.h + 6;
+        }
+        for (var g : bc.groups()) {
+            var idc = text(RIGHT_X + 8, ry, 40, g.id(), 12, FACE, hue, "left");
+            var body = text(RIGHT_X + 54, ry, RIGHT_W - 54,
+                    g.title() + "  (" + g.stmts().size() + " statement" + (g.stmts().size() == 1 ? "" : "s") + ")",
+                    12, FACE, INK, "left");
+            idc.h = body.h;
+            ry += body.h + 6;
+        }
+        ry += 12;
+    }
+    return Math.max(y, ry) + 60;
+}
+
+// ------------------------------------------------------------------ emit: excalidraw
+
+String q(String s) {
+    var b = new StringBuilder("\"");
+    for (var c : s.toCharArray()) {
+        switch (c) {
+            case '"' -> b.append("\\\"");
+            case '\\' -> b.append("\\\\");
+            case '\n' -> b.append("\\n");
+            case '\r' -> {}
+            case '\t' -> b.append("\\t");
+            default -> {
+                if (c < 0x20) b.append(String.format("\\u%04x", (int) c));
+                else b.append(c);
+            }
+        }
+    }
+    return b.append('"').toString();
+}
+
+String jn(double v) { return String.valueOf(Math.round(v)); }
+
+String hash(String seed) {
+    try {
+        var d = MessageDigest.getInstance("SHA-256").digest(seed.getBytes(StandardCharsets.UTF_8));
+        var b = new StringBuilder();
+        for (int i = 0; i < 11; i++) b.append(String.format("%02x", d[i]));
+        return b.toString();
+    } catch (Exception e) {
+        throw new IllegalStateException(e);
+    }
+}
+
+long seedOf(String id) { return Long.parseLong(hash(id).substring(0, 8), 16) % 2147483647L; }
+
+StringBuilder base(String id, String type, double x, double y, double w, double h,
+                   String stroke, String bg, String style, String round, String bound) {
+    return new StringBuilder()
+            .append("{\"id\":").append(q(id))
+            .append(",\"type\":").append(q(type))
+            .append(",\"x\":").append(jn(x)).append(",\"y\":").append(jn(y))
+            .append(",\"width\":").append(jn(w)).append(",\"height\":").append(jn(h))
+            .append(",\"angle\":0,\"strokeColor\":").append(q(stroke))
+            .append(",\"backgroundColor\":").append(q(bg))
+            .append(",\"fillStyle\":\"solid\",\"strokeWidth\":2,\"strokeStyle\":").append(q(style))
+            .append(",\"roughness\":").append(ROUGHNESS).append(",\"opacity\":100,\"groupIds\":[],\"frameId\":null,\"roundness\":").append(round)
+            .append(",\"seed\":").append(seedOf(id))
+            .append(",\"version\":1,\"versionNonce\":").append(seedOf(id + "n"))
+            .append(",\"isDeleted\":false,\"boundElements\":").append(bound)
+            .append(",\"updated\":1,\"link\":null,\"locked\":false");
+}
+
+String textEl(String id, String container, double x, double y, double w, double h,
+              String colour, int font, int family, String align, String body) {
+    return base(id, "text", x, y, w, h, colour, "transparent", "solid", "null", "[]")
+            .append(",\"text\":").append(q(body))
+            .append(",\"fontSize\":").append(font)
+            .append(",\"fontFamily\":").append(family)
+            .append(",\"textAlign\":").append(q(align))
+            .append(",\"verticalAlign\":\"middle\",\"containerId\":").append(container == null ? "null" : q(container))
+            .append(",\"originalText\":").append(q(body))
+            .append(",\"autoResize\":true,\"lineHeight\":1.25}")
+            .toString();
+}
+
+String excalidraw() {
+    var els = new ArrayList<String>();
+    for (var s : canvas) {
+        var id = hash(s.key);
+        var body = String.join("\n", s.lines);
+        switch (s.kind) {
+            case "arrow", "dash", "rule" -> els.add(base(id, "arrow", s.x, s.y, s.w, s.h, s.stroke, "transparent",
+                    s.kind.equals("dash") ? "dashed" : "solid", "{\"type\":2}", "[]")
+                    .append(",\"points\":[[0,0],[").append(jn(s.w)).append(",").append(jn(s.h))
+                    .append("]],\"lastCommittedPoint\":null,\"startBinding\":null,\"endBinding\":null")
+                    .append(",\"startArrowhead\":null,\"endArrowhead\":")
+                    .append(s.kind.equals("arrow") ? "\"arrow\"" : "null").append(",\"elbowed\":false}").toString());
+            case "text" -> els.add(textEl(id, null, s.x, s.y, s.w, s.h, s.stroke, s.font, s.family, s.align, body));
+            default -> {
+                var type = switch (s.kind) { case "ellipse" -> "ellipse"; case "diamond" -> "diamond"; default -> "rectangle"; };
+                var tid = hash(s.key + ":t");
+                var bound = body.isEmpty() ? "[]" : "[{\"type\":\"text\",\"id\":" + q(tid) + "}]";
+                els.add(base(id, type, s.x, s.y, s.w, s.h, s.stroke, s.fill, "solid",
+                        s.kind.equals("diamond") || s.kind.equals("ellipse") ? "null" : "{\"type\":3}", bound).append("}").toString());
+                if (!body.isEmpty())
+                    els.add(textEl(tid, id, s.x + 8, s.y + 8, s.w - 16, s.h - 16,
+                            s.kind.equals("chip") ? s.stroke : INK, s.font, s.family, "center", body));
+                if (!s.tag.isBlank()) {
+                    var gid = hash(s.key + ":g");
+                    els.add(textEl(gid, null, s.x + s.w - 8 - s.tag.length() * 7, s.y - 20, s.tag.length() * 8, 16,
+                            s.stroke, 12, FACE, "right", s.tag));
+                }
+            }
+        }
+    }
+    return "{\"type\":\"excalidraw\",\"version\":2,\"source\":\"ears-onepager\",\"elements\":["
+            + String.join(",", els)
+            + "],\"appState\":{\"gridSize\":null,\"viewBackgroundColor\":\"#ffffff\"},\"files\":{}}\n";
+}
+
+// ------------------------------------------------------------------ emit: printable html
+
+String esc(String s) { return s.replace("&", "&amp;").replace("<", "&lt;").replace(">", "&gt;"); }
+
+void svgLines(StringBuilder b, List<String> lines, double cx, double cy, int font, String colour, String anchor) {
+    double lh = font * 1.3;
+    double first = cy - (lines.size() - 1) * lh / 2 + font * 0.35;
+    for (int i = 0; i < lines.size(); i++) {
+        b.append("<text x=\"").append(jn(cx)).append("\" y=\"").append(jn(first + i * lh))
+                .append("\" font-size=\"").append(font).append("\" fill=\"").append(colour)
+                .append("\" text-anchor=\"").append(anchor).append("\">").append(esc(lines.get(i))).append("</text>");
+    }
+}
+
+String svg(double height) {
+    var b = new StringBuilder();
+    b.append("<svg xmlns=\"http://www.w3.org/2000/svg\" viewBox=\"0 0 ")
+            .append(jn(PAGE_W)).append(" ").append(jn(height)).append("\" width=\"100%\">");
+    b.append("<rect width=\"100%\" height=\"100%\" fill=\"#ffffff\"/>");
+    for (var s : canvas) {
+        switch (s.kind) {
+            case "arrow", "dash", "rule" -> {
+                double x2 = s.x + s.w, y2 = s.y + s.h;
+                b.append("<line x1=\"").append(jn(s.x)).append("\" y1=\"").append(jn(s.y))
+                        .append("\" x2=\"").append(jn(x2)).append("\" y2=\"").append(jn(y2))
+                        .append("\" stroke=\"").append(s.stroke).append("\" stroke-width=\"2\"")
+                        .append(s.kind.equals("dash") ? " stroke-dasharray=\"7 7\" opacity=\"0.65\"" : "").append("/>");
+                if (s.kind.equals("arrow")) {
+                    double len = Math.hypot(s.w, s.h);
+                    if (len > 1) {
+                        double ux = s.w / len, uy = s.h / len, a = 9;
+                        b.append("<polygon points=\"").append(jn(x2)).append(",").append(jn(y2)).append(" ")
+                                .append(jn(x2 - a * ux - a * 0.55 * uy)).append(",").append(jn(y2 - a * uy + a * 0.55 * ux)).append(" ")
+                                .append(jn(x2 - a * ux + a * 0.55 * uy)).append(",").append(jn(y2 - a * uy - a * 0.55 * ux))
+                                .append("\" fill=\"").append(s.stroke).append("\"/>");
+                    }
+                }
+            }
+            case "text" -> {
+                double lh = s.font * 1.3;
+                double ax = s.align.equals("left") ? s.x : s.align.equals("right") ? s.x + s.w : s.x + s.w / 2;
+                var anchor = s.align.equals("left") ? "start" : s.align.equals("right") ? "end" : "middle";
+                for (int i = 0; i < s.lines.size(); i++) {
+                    b.append("<text x=\"").append(jn(ax)).append("\" y=\"").append(jn(s.y + s.font * 1.05 + i * lh))
+                            .append("\" font-size=\"").append(s.font).append("\" fill=\"").append(s.stroke)
+                            .append("\" text-anchor=\"").append(anchor).append("\"")
+                            .append(s.bold ? " font-weight=\"700\"" : "").append(">")
+                            .append(esc(s.lines.get(i))).append("</text>");
+                }
+            }
+            case "ellipse" -> b.append("<ellipse cx=\"").append(jn(s.x + s.w / 2)).append("\" cy=\"").append(jn(s.y + s.h / 2))
+                    .append("\" rx=\"").append(jn(s.w / 2)).append("\" ry=\"").append(jn(s.h / 2))
+                    .append("\" fill=\"").append(s.fill).append("\" stroke=\"").append(s.stroke).append("\" stroke-width=\"2\"/>");
+            case "diamond" -> b.append("<polygon points=\"")
+                    .append(jn(s.x + s.w / 2)).append(",").append(jn(s.y)).append(" ")
+                    .append(jn(s.x + s.w)).append(",").append(jn(s.y + s.h / 2)).append(" ")
+                    .append(jn(s.x + s.w / 2)).append(",").append(jn(s.y + s.h)).append(" ")
+                    .append(jn(s.x)).append(",").append(jn(s.y + s.h / 2))
+                    .append("\" fill=\"").append(s.fill).append("\" stroke=\"").append(s.stroke).append("\" stroke-width=\"2\"/>");
+            default -> b.append("<rect x=\"").append(jn(s.x)).append("\" y=\"").append(jn(s.y))
+                    .append("\" width=\"").append(jn(s.w)).append("\" height=\"").append(jn(s.h))
+                    .append("\" rx=\"").append(s.kind.equals("chip") ? 13 : 9)
+                    .append("\" fill=\"").append(s.fill).append("\" stroke=\"").append(s.stroke).append("\" stroke-width=\"2\"/>");
+        }
+        if (!s.kind.equals("text") && !s.kind.equals("arrow") && !s.kind.equals("dash") && !s.kind.equals("rule")) {
+            if (!s.lines.isEmpty())
+                svgLines(b, s.lines, s.x + s.w / 2, s.y + s.h / 2, s.font,
+                        s.kind.equals("chip") ? s.stroke : INK, "middle");
+            if (!s.tag.isBlank())
+                b.append("<text x=\"").append(jn(s.x + s.w)).append("\" y=\"").append(jn(s.y - 7))
+                        .append("\" font-size=\"12\" fill=\"").append(s.stroke)
+                        .append("\" text-anchor=\"end\">").append(esc(s.tag)).append("</text>");
+        }
+    }
+    return b.append("</svg>").toString();
+}
+
+String html(String title, double height) {
+    return """
+            <!doctype html>
+            <html lang="en"><head><meta charset="utf-8"><title>%s</title>
+            <style>
+              @page { size: A4 landscape; margin: 6mm; }
+              html, body { margin: 0; padding: 0; background: #fff; }
+              body { font-family: ui-sans-serif, system-ui, -apple-system, "Helvetica Neue", Arial, sans-serif; }
+              main { padding: 10px 14px; }
+              svg { display: block; width: 100%%; height: auto; }
+              svg text { font-family: ui-sans-serif, system-ui, -apple-system, "Helvetica Neue", Arial, sans-serif; }
+              @media print { main { padding: 0; } svg { max-height: 194mm; margin: 0 auto; } }
+            </style></head><body><main>%s</main></body></html>
+            """.formatted(esc(title), svg(height));
+}
+
+// ------------------------------------------------------------------ system reader
+
+List<String> sectionBullets(Path file, String heading) throws IOException {
+    var out = new ArrayList<String>();
+    boolean in = false;
+    for (var line : readBody(file)) {
+        var t = line.trim();
+        if (t.startsWith("## ")) { in = t.substring(3).trim().equalsIgnoreCase(heading); continue; }
+        if (in && t.startsWith("- ")) out.add(t.substring(2).trim());
+    }
+    return out;
+}
+
+List<String> ticked(String s) {
+    var out = new ArrayList<String>();
+    var m = java.util.regex.Pattern.compile("`([^`]+)`").matcher(s);
+    while (m.find()) out.add(m.group(1));
+    return out;
+}
+
+// ------------------------------------------------------------------ cli
+
+void help() {
+    IO.println("""
+            Usage: %1$s <spec-file>          one capability spec or feature request
+                   %1$s --system <src-root>  every package doc under a source root
+                   %1$s ... -o <dir>         output directory (default: current)
+                   %1$s ... --pdf            also render a PDF with a headless browser
+                   %1$s ... --footer <text>  a footer line (classification, owner, date)
+                   %1$s ... --sketch         Excalidraw's hand-drawn look instead of clean
+                   %1$s -h | -version
+
+            Always writes <name>.excalidraw and <name>.html. --pdf prints the HTML with the
+            first browser found (CHROME env var, Chrome, Chromium or Edge); without one,
+            open the HTML and use Print -> Save as PDF.
+            """.formatted(NAME));
+}
+
+/// First headless-capable browser on this machine, or null.
+String browser() {
+    var candidates = new ArrayList<String>();
+    var env = System.getenv("CHROME");
+    if (env != null && !env.isBlank()) candidates.add(env);
+    candidates.addAll(List.of(
+            "/Applications/Google Chrome.app/Contents/MacOS/Google Chrome",
+            "/Applications/Chromium.app/Contents/MacOS/Chromium",
+            "/Applications/Microsoft Edge.app/Contents/MacOS/Microsoft Edge",
+            "google-chrome", "google-chrome-stable", "chromium", "chromium-browser", "microsoft-edge"));
+    for (var c : candidates) {
+        if (c.contains("/")) {
+            if (Files.isExecutable(Path.of(c))) return c;
+        } else {
+            for (var dir : System.getenv("PATH").split(File.pathSeparator))
+                if (Files.isExecutable(Path.of(dir, c))) return Path.of(dir, c).toString();
+        }
+    }
+    return null;
+}
+
+void renderPdf(Path page, Path pdf) throws Exception {
+    var exe = browser();
+    if (exe == null) {
+        IO.println(NAME + ": no headless browser found — open " + page + " and use Print -> Save as PDF");
+        return;
+    }
+    var proc = new ProcessBuilder(exe, "--headless", "--disable-gpu", "--no-pdf-header-footer",
+            "--print-to-pdf=" + pdf.toAbsolutePath(), page.toAbsolutePath().toString())
+            .redirectErrorStream(true).start();
+    var log = new String(proc.getInputStream().readAllBytes(), StandardCharsets.UTF_8);
+    if (proc.waitFor() == 0 && Files.exists(pdf)) IO.println(NAME + ": " + pdf);
+    else IO.println(NAME + ": pdf failed\n" + log);
+}
+
+void main(String... args) throws Exception {
+    Path input = null, out = Path.of("");
+    boolean system = false, pdf = false;
+    String footer = null;
+    for (int i = 0; i < args.length; i++) {
+        switch (args[i]) {
+            case "-h", "--help" -> { help(); return; }
+            case "-version" -> { IO.println(NAME + " " + VERSION); return; }
+            case "--system" -> { system = true; input = Path.of(args[++i]); }
+            case "--pdf" -> pdf = true;
+            case "--footer" -> footer = args[++i];
+            case "--sketch" -> { ROUGHNESS = 1; FACE = 1; }
+            case "-o" -> out = Path.of(args[++i]);
+            default -> input = Path.of(args[i]);
+        }
+    }
+    if (input == null) { help(); System.exit(2); }
+    if (!Files.exists(input)) { IO.println(NAME + ": no such path: " + input); System.exit(1); }
+
+    String name;
+    double height;
+    if (system) {
+        List<Path> docs;
+        try (var walk = Files.walk(input)) {
+            docs = walk.filter(p -> p.getFileName().toString().startsWith("package-info."))
+                    .sorted(Comparator.comparingInt(Path::getNameCount).thenComparing(Path::toString)).toList();
+        }
+        if (docs.isEmpty()) { IO.println(NAME + ": no package-info docs under " + input); System.exit(1); }
+        var sysDoc = docs.getFirst();
+        var sys = parseSpec(sysDoc);
+        var bcs = new ArrayList<Bc>();
+        for (var d : docs.subList(1, docs.size())) {
+            var s = parseSpec(d);
+            bcs.add(new Bc(baseName(d), s.oneLiner(), s.groups()));
+        }
+        var edges = new ArrayList<String[]>();
+        for (var bullet : sectionBullets(sysDoc, "Components")) {
+            var edge = edgeOf(bullet);
+            if (edge != null) edges.add(edge);
+            else if (ticked(bullet).size() >= 2)
+                IO.println(NAME + ": no relation word in \"" + bullet + "\" — edge not drawn");
+        }
+        name = "system";
+        height = layoutSystem(sys.title(), sys.oneLiner(), sys.meta(), bcs, edges);
+    } else {
+        var spec = parseSpec(input);
+        if (spec.groups().isEmpty()) IO.println(NAME + ": warning — no `## Requirements` groups found in " + input);
+        name = baseName(input);
+        height = layoutCapability(spec);
+    }
+
+    if (footer != null) {
+        rule(LEFT_X, height, PAGE_W - 40, HAIRLINE);
+        text(LEFT_X, height + 10, PAGE_W - 80, footer, 11, FACE, MUTED, "left");
+        height += 46;
+    }
+
+    if (!out.toString().isEmpty()) Files.createDirectories(out);
+    var json = out.resolve(name + ".excalidraw");
+    var page = out.resolve(name + ".html");
+    Files.writeString(json, excalidraw());
+    Files.writeString(page, html(name, height));
+    IO.println(NAME + ": " + json + "  (" + canvas.size() + " shapes)");
+    IO.println(NAME + ": " + page);
+    if (pdf) renderPdf(page, out.resolve(name + ".pdf"));
+}

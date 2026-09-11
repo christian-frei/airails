@@ -1,6 +1,6 @@
 ---
 name: sbce
-description: Spec-driven BCE workflow where one capability spec equals one business component (same name) and the spec is the boundary contract. Invoked as `/sbce new|apply <capability-or-feature>` (or by intent), it drives declare → converge; the stack's own test loop is the oracle for "done". `new` accepts a BC name or a natural-language feature description that may decompose into one or several BCs (new or existing). Stack-neutral — composes with `/bce` and a stack skill (`/java-cli-app`, `/microprofile-server`, `/web-components`, …) for code shape and verification. Use when authoring or converging a capability spec, declaring a feature as one or more BCs, mapping a spec to a BC, or running `/sbce new`, `/sbce apply`. Triggers on "SBCE", "capability spec", "spec-driven BCE", "declare a feature", "spec to BC", "converge to spec", "/sbce new", "/sbce apply".
+description: Spec-driven BCE workflow where one capability spec equals one business component (same name) and the spec is the boundary contract. Invoked as `/sbce new|apply <capability-or-feature>` (or by intent), it drives declare → converge; the stack's own test loop is the oracle for "done". `new` accepts a BC name, a natural-language feature description that may decompose into one or several BCs (new or existing), or `--from <file>` — a business-authored EARS feature request (written with `/ears-spec`, delivered by e-mail or ticket) which is reviewed, carved, authored into specs and frozen under `specs/inbox/` as the record of the request. Stack-neutral — composes with `/bce` and a stack skill (`/java-cli-app`, `/microprofile-server`, `/web-components`, …) for code shape and verification. Use when authoring or converging a capability spec, declaring a feature as one or more BCs, mapping a spec to a BC, or running `/sbce new`, `/sbce apply`. Triggers on "SBCE", "capability spec", "spec-driven BCE", "declare a feature", "spec to BC", "converge to spec", "/sbce new", "/sbce apply", "/sbce new --from", "ingest this requirements document", "the business sent us requirements", "turn this feature request into specs".
 ---
 
 Drive the spec-driven BCE workflow — one skill owns both the rules and the steps. Invoke as
@@ -10,7 +10,7 @@ strictly.
 ## Guiding principles
 
 - The spec **is** the boundary contract — *what the boundary promises*, never *how*.
-- The spec **lives in the BC's package doc** — `package-info.java` (Java, `///` Markdown) or `package-info.md` (web) — co-located with the code it governs. There is no separate `specs/` tree and no hand-typed package coordinate. In Java the `///` doc renders via `javadoc`, so the same file is source-of-truth *and* published contract.
+- The spec **lives in the BC's package doc** — `package-info.java` (Java, `///` Markdown) or `package-info.md` (web) — co-located with the code it governs. There is no separate `specs/` tree and no hand-typed package coordinate (the one exception is `specs/inbox/` — frozen copies of *received* business requests plus their intake maps, which carry no spec authority; see `new --from`). In Java the `///` doc renders via `javadoc`, so the same file is source-of-truth *and* published contract.
 - One capability spec ≡ one business component, named the same. No translation between "what" and "where".
 - The task list is the **gap**, read off `spec` vs `BC` on demand — never a hand-maintained tasks file.
 - One spec per capability, the single source of truth — never diff or merge two specs.
@@ -73,6 +73,9 @@ source of truth**. Author from `references/readme-template.md`. Two slices, hand
 | Decompose a feature into BCs (new vs existing) | this skill's judgment, over a read-only scan of the source tree's package docs, **user-confirmed** | no — semantic |
 | Record a confirmed choice as a `Dn` decision | this skill offers, **user-confirmed** — never recorded silently | no — semantic |
 | Author the spec content (boundary ops, EARS requirements) | this skill's judgment | no — semantic |
+| Map a received business feature request onto BCs and spec-local ids | this skill's judgment, gated by `/ears-tests review`, **user-confirmed** | no — semantic |
+| Freeze the received intake file under `specs/inbox/` | this skill | yes — verbatim copy |
+| Verify an intake map against the specs (dangling / unmapped / blocked rows) | this skill | grep-level |
 | Place the BC — package doc + layer dirs at the source location | the composed stack skill (owns the package base / source root) | yes — stack-defined |
 | Structural sync, **both directions** (spec→code: op→method, `Rn.m`→test · code→spec: method→op, test-id→statement, entity→`## Entities`) | this skill, made checkable by the stack's traceability convention | grep-level |
 | "Does this code satisfy the requirement" | this skill's judgment, **grounded by the requirement's passing test** | no — semantic |
@@ -82,14 +85,15 @@ source of truth**. Author from `references/readme-template.md`. Two slices, hand
 
 ## Invocation modes: new · apply
 
-Read mode + capability from the invocation (`/sbce apply checkout`). If mode is missing, infer: no
-spec yet → `new`; spec exists but not converged → `apply`; else ask.
+Read mode + capability from the invocation (`/sbce apply checkout`, `/sbce new --from request.md`).
+If mode is missing, infer: no spec yet → `new`; spec exists but not converged → `apply`; else ask.
 
 ### new — declare
 
 Declare a new feature from a **BC name** (one precise BC), a **natural-language feature
-description** (which may decompose into one *or several* BCs, new or existing), or the **repo
-README seed** (`/sbce new` with no argument). The novelty is the *intent*, not the artifact —
+description** (which may decompose into one *or several* BCs, new or existing), an **intake file**
+(`--from <file>` — a business-authored EARS feature request), or the **repo README seed**
+(`/sbce new` with no argument). The novelty is the *intent*, not the artifact —
 coining a BC and extending one are both "new".
 
 **Clarify first (both paths).** Resolve every ambiguity the contract needs before authoring. Vague
@@ -119,6 +123,26 @@ a guessed spec makes the oracle verify assumptions, not intent.
 5. If the carving introduces cross-BC wiring (a call, a shared noun, a system invariant), record it in the system doc — user-confirmed.
 6. A carving or stack choice the user confirmed **against** a proposed alternative is a decision — offer to record it as a `Dn` in the system doc's `## Decisions`; never record one silently.
 
+**Intake file** (`/sbce new --from payment-release.md`):
+
+A feature request authored on the business side — typically with `/ears-spec` by a product owner or
+requirement engineer, delivered as an e-mail attachment or a ticket body. Its subject is "the
+system", it names no components, and it is **intake input, not a source of truth** — the same class
+as the README seed. The author was deliberately shielded from every technical question; the team is
+not.
+
+1. **Gate on review.** Run `/ears-tests review <file>` first. Blockers → author nothing: report them, plus the questions to send back to the file's `contact:`, and stop. A guessed statement makes the oracle verify an assumption instead of the intent.
+2. Read `## Constraints` and `## Open questions` before `## Requirements`. An open question blocks the statements it touches, not the whole file — carve around it, or ask.
+3. Treat `## Operations` + `## Requirements` as the **feature description** and run the feature-description steps above (scan → propose carving → **confirm** → author). The clarify loop stays on, and here it may use technical judgment freely.
+4. Authoring the statements: the subject "the system" becomes **the BC**; each statement takes a **fresh, spec-local `Rn.m`** — feature ids cannot survive a carving across several BCs. The spec grammar stays untouched: no origin marker goes into a statement.
+5. **Write the intake map** at `specs/inbox/<feature>.map.md` — which business statement became which spec statement in which BC, *and* the ones that were not authored (blocked on an open question, or declined with a reason). Author it from `references/intake-map-template.md`. It is the only record of the origin link, so it is written on every intake run and never hand-edited.
+6. **Freeze the request** at `specs/inbox/<feature>.md`, byte-identical to what was received and never edited afterwards; a later revision overwrites it and git holds the history. It records what was asked — no `Rn` authority, never re-synced, and (with its map) the sole exception to "no separate `specs/` tree".
+7. A `## Constraints` entry that shaped the carving is a decision — offer to record it as a `Dn`; never silently, and note in the map where it landed. Constraints are never turned into EARS statements: they were not authored as testable rules.
+8. Report back to the sender: which BCs the feature became, which feature ids landed where, and which statements are blocked on an open question. The map is that report — quote ids, the only vocabulary both sides share.
+
+Never edit the intake file to match what was built, and never treat it as the contract once specs
+exist. A change on the business side is a **new revision, sent again** and re-run through `--from`.
+
 **README seed** (`/sbce new`, no argument):
 
 The repo-root `README.md` doubles as an optional **inception seed** — a human (often a product
@@ -141,6 +165,7 @@ Make reality match the declared spec — the "make it so" step. Idempotent.
 4. Else read the gap — both directions — and close it:
    - **spec → code** (this skill closes it): each undeclared boundary op → a `boundary` method; each untested statement id `Rn.m` → a traceable test (delegate the EARS→table transform to `/ears-tests` — one parameterized test per `### Rn`, one labeled row per `Rn.m`); then write code to pass them. Invoke `/bce` (invariants) + the stack skill (idioms).
    - **code → spec** (surface, never auto-author): a `boundary` method with no declared op, a test tracing an id no statement carries, an `entity` type absent from `## Entities` — report each as drift and stop on it. The spec is the source of truth, so the user decides: declare it (`/sbce new` / extend the doc) or delete the orphan. Never edit the spec to match code.
+   - **intake maps** (only where `specs/inbox/*.map.md` exist): every spec id a map names still resolves in the named BC (or the system doc), every BC it names still exists, and every `Rn.m` in the frozen request appears exactly **once** in its map. Report `dangling` rows (a statement was retired under the map), `unmapped` ones (the intake dropped a business requirement), and any row still `blocked`. All greps — report only; never edit a map or a spec to make them agree.
 5. Re-run. Repeat 3–5, bounded to **≤3 passes**, then surface remaining failures/drift to the user.
 
 Green build + no structural gap or drift is the only definition of done.

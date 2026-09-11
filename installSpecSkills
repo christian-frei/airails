@@ -1,0 +1,171 @@
+#!/bin/sh
+# installSpecSkills — install only the requirement-engineering skills:
+#
+#   ears-spec    author a feature request with EARS requirements, business questions only
+#   ears-tests   check those requirements are testable before sending them
+#
+# For product owners, business analysts and requirement engineers. No JDK, no build,
+# no interactive terminal required — unlike ./installSkills, which installs everything.
+#
+# Internal addition to this fork; not part of upstream airails.
+
+set -eu
+
+VERSION="2026-08-26.1"
+NAME="$(basename "$0")"
+SKILLS="ears-spec ears-tests"
+SKILL_ROOT="bce"
+
+AGENTS="claude vibe kiro copilot codex goose"
+
+agent_dir() {
+    case "$1" in
+        claude)  printf '%s/.claude/skills\n'        "$HOME" ;;
+        vibe)    printf '%s/.vibe/skills\n'          "$HOME" ;;
+        kiro)    printf '%s/.kiro/skills\n'          "$HOME" ;;
+        copilot) printf '%s/.copilot/skills\n'       "$HOME" ;;
+        codex)   printf '%s/.agents/skills\n'        "$HOME" ;;
+        goose)   printf '%s/.config/goose/skills\n'  "$HOME" ;;
+        *)       return 1 ;;
+    esac
+}
+
+# the directory that must already exist for us to consider an agent "in use"
+agent_home() {
+    case "$1" in
+        claude)  printf '%s/.claude\n'       "$HOME" ;;
+        vibe)    printf '%s/.vibe\n'         "$HOME" ;;
+        kiro)    printf '%s/.kiro\n'         "$HOME" ;;
+        copilot) printf '%s/.copilot\n'      "$HOME" ;;
+        codex)   printf '%s/.agents\n'       "$HOME" ;;
+        goose)   printf '%s/.config/goose\n' "$HOME" ;;
+        *)       return 1 ;;
+    esac
+}
+
+help() {
+    cat <<USAGE
+$NAME $VERSION
+
+Installs the two requirement-engineering skills ($SKILLS) and nothing else.
+
+Usage:
+  ./$NAME              install for every agent found on this machine (claude if none)
+  ./$NAME -a <agent>   install for one agent: $AGENTS
+  ./$NAME -a all       install for every supported agent, whether in use or not
+  ./$NAME -l           list what is installed where
+  ./$NAME -u [-a ...]  uninstall
+  ./$NAME -h           show this help
+USAGE
+}
+
+# repository root = the directory holding this script, so it runs from anywhere
+repo_root() {
+    d=$(dirname -- "$0")
+    (cd -- "$d" && pwd)
+}
+
+resolve_targets() {
+    case "$1" in
+        auto)
+            found=""
+            for a in $AGENTS; do
+                [ -d "$(agent_home "$a")" ] && found="$found $a"
+            done
+            [ -n "$found" ] && printf '%s\n' "$found" || printf 'claude\n'
+            ;;
+        all) printf '%s\n' "$AGENTS" ;;
+        *)
+            if agent_dir "$1" >/dev/null 2>&1; then
+                printf '%s\n' "$1"
+            else
+                printf '%s: unknown agent "%s" — expected one of: %s, all\n' "$NAME" "$1" "$AGENTS" >&2
+                exit 2
+            fi
+            ;;
+    esac
+}
+
+install_to() {
+    dir="$2"
+    mkdir -p "$dir"
+    for skill in $SKILLS; do
+        src="$ROOT/$SKILL_ROOT/$skill"
+        if [ ! -f "$src/SKILL.md" ]; then
+            printf '%s: missing %s — run this script from inside the repository\n' "$NAME" "$src" >&2
+            exit 1
+        fi
+        dest="$dir/$skill"
+        rm -rf -- "$dest"
+        cp -R -- "$src" "$dest"
+        printf '  %-12s -> %s\n' "$skill" "$dest"
+    done
+}
+
+uninstall_from() {
+    dir="$2"
+    for skill in $SKILLS; do
+        dest="$dir/$skill"
+        if [ -d "$dest" ]; then
+            rm -rf -- "$dest"
+            printf '  removed %s\n' "$dest"
+        fi
+    done
+}
+
+list_all() {
+    for a in $AGENTS; do
+        dir=$(agent_dir "$a")
+        for skill in $SKILLS; do
+            if [ -f "$dir/$skill/SKILL.md" ]; then
+                printf '  %-8s %-12s %s\n' "$a" "$skill" "$dir/$skill"
+            fi
+        done
+    done
+}
+
+ROOT=$(repo_root)
+action="install"
+agent="auto"
+
+while [ $# -gt 0 ]; do
+    case "$1" in
+        -h|--help) help; exit 0 ;;
+        -version)  printf '%s %s\n' "$NAME" "$VERSION"; exit 0 ;;
+        -l|--list) action="list" ;;
+        -u|--uninstall) action="uninstall" ;;
+        -a|--agent)
+            shift
+            [ $# -gt 0 ] || { printf '%s: -a needs an agent name\n' "$NAME" >&2; exit 2; }
+            agent="$1"
+            ;;
+        *) printf '%s: unknown option "%s" — try -h\n' "$NAME" "$1" >&2; exit 2 ;;
+    esac
+    shift
+done
+
+printf '%s %s\n' "$NAME" "$VERSION"
+
+case "$action" in
+    list)
+        printf 'installed:\n'
+        out=$(list_all)
+        [ -n "$out" ] && printf '%s\n' "$out" || printf '  (nothing)\n'
+        ;;
+    uninstall)
+        targets=$(resolve_targets "$agent")
+        for a in $targets; do
+            printf '%s:\n' "$a"
+            uninstall_from "$a" "$(agent_dir "$a")"
+        done
+        printf '%s: done\n' "$NAME"
+        ;;
+    install)
+        targets=$(resolve_targets "$agent")
+        for a in $targets; do
+            printf '%s:\n' "$a"
+            install_to "$a" "$(agent_dir "$a")"
+        done
+        printf '%s: done — start your agent and try: /ears-spec new "<your feature>"\n' "$NAME"
+        ;;
+esac
