@@ -1,5 +1,6 @@
 ---
 name: sbce
+argument-hint: new|apply <capability-or-feature>
 description: Spec-driven BCE workflow where one capability spec equals one business component (same name) and the spec is the boundary contract. Invoked as `/sbce new|apply <capability-or-feature>` (or by intent), it drives declare → converge; the stack's own test loop is the oracle for "done". `new` accepts a BC name, a natural-language feature description that may decompose into one or several BCs (new or existing), or `--from <file>` — a business-authored EARS feature request (written with `/ears-spec`, delivered by e-mail or ticket) which is reviewed, carved, authored into specs and frozen under `specs/inbox/` as the record of the request. Stack-neutral — composes with `/bce` and a stack skill (`/java-cli-app`, `/microprofile-server`, `/web-components`, …) for code shape and verification. Use when authoring or converging a capability spec, declaring a feature as one or more BCs, mapping a spec to a BC, or running `/sbce new`, `/sbce apply`. Triggers on "SBCE", "capability spec", "spec-driven BCE", "declare a feature", "spec to BC", "converge to spec", "/sbce new", "/sbce apply", "/sbce new --from", "ingest this requirements document", "the business sent us requirements", "turn this feature request into specs".
 ---
 
@@ -106,6 +107,19 @@ a guessed spec makes the oracle verify assumptions, not intent.
 - **Interrogate per boundary op** — its trigger/response (event-driven), invalid/edge triggers (`If…then`), state constraints (`While…`) — and across the BC: scope (create-only vs full lifecycle, in/out), entities and fields (required/optional, identity, validation), and what "done" means.
 - **Stop only when** every boundary op and EARS statement, happy *and* unhappy, is answerable from the user's words such that another engineer would author the same spec. If in doubt, ask one more.
 
+**Brief input — the loop already ran.** A filled use case or user story authored with
+`/capability-brief` (recognisable by its `## Capability` … `## Open issues` sections, each with a
+stated section→spec mapping in its template) is the clarify loop run upstream with the domain
+owner, so the answers are the user's confirmed word: `## Capability` is the confirmed carving (name,
+`new`/`extends`, responsibility) — it replaces the carving confirmation below; each `record:` line
+under `## Decisions` is a confirmed `Dn` to log without offering it again; a supporting actor
+tagged `capability` is declared cross-BC wiring for the system doc; `## Out of scope` closes the
+scope questions. Ask exactly what `## Open issues` lists plus any section left blank — nothing
+else — then author from the brief's mapping: named operations → `## Boundary`, `Inputs` and
+`Extensions` → `If…then`, optional paths → `Where…`, `Lifecycle` → `While…`, `Entities` →
+`## Entities`. The brief is inception input, not a source of truth: once the spec exists, the
+spec is authoritative.
+
 **BC name** (`/sbce new checkout`):
 
 1. Validate the name — a single lowercase token, no dots/spaces/uppercase. Reject otherwise.
@@ -118,10 +132,10 @@ a guessed spec makes the oracle verify assumptions, not intent.
 
 1. Scan existing BCs — read their package docs for responsibilities, and the system doc's `## Decisions` if present: never propose an alternative a `Dn` records as rejected.
 2. **Propose** a BC set — each tagged **new** (coin a verb-noun name) or **extend-existing**, each with the one-line responsibility it owns.
-3. **Confirm the carving before any write** — decomposition has no test oracle, so the human approves the BC set.
+3. **Confirm the carving before any write** — decomposition has no test oracle, so the human approves the BC set (a brief's `## Capability` is that approval).
 4. Realise each entry via the BC-name steps: **new** → fresh doc + dirs; **extend-existing** → add ops / requirements to its **single** existing doc, never a second spec.
 5. If the carving introduces cross-BC wiring (a call, a shared noun, a system invariant), record it in the system doc — user-confirmed.
-6. A carving or stack choice the user confirmed **against** a proposed alternative is a decision — offer to record it as a `Dn` in the system doc's `## Decisions`; never record one silently.
+6. A carving or stack choice the user confirmed **against** a proposed alternative is a decision — offer to record it as a `Dn` in the system doc's `## Decisions`; never record one silently (a brief's `record:` lines are already confirmed).
 
 **Intake file** (`/sbce new --from payment-release.md`):
 
@@ -178,7 +192,7 @@ Green build + no structural gap or drift is the only definition of done.
 
 ## Spec format rules
 
-- Sections in order: `# Title` + one-line responsibility, `## Boundary`, `## Requirements`, optional `## Entities`, optional `## Decisions` (BC-local confirmed choices — same rules as the system doc's section), `## Out of scope`.
+- Sections in order: `# Title` + one-line responsibility, `## Boundary`, `## Requirements`, optional `## Entities`, optional `## Decisions` (BC-local confirmed choices — same rules as the system doc's section), optional `## References` (external specs the BC implements), `## Out of scope`.
 - Boundary operations are verb-noun and transport-neutral (`place-order`, not `POST /orders`).
 - Requirements are [EARS](https://alistairmavin.com/ears/) statements — one of six patterns, the system always **the BC** — grouped under a titled `### Rn`, each statement carrying a stable id `Rn.m` (group `n`, statement `m`). Reach for `If…then` and `While…` to capture error and edge cases.
 
@@ -195,6 +209,7 @@ Green build + no structural gap or drift is the only definition of done.
 - Ids are **stable**: never renumber on reorder; a removed id is retired, not reused.
 - Every boundary op traces to a group `Rn`; every statement `Rn.m` traces to ≥1 test that **embeds its id** — per-statement and **bijective both ways**: a new `Rn.m` with no test is a gap, and a method, trace id, or `entity` type with no spec counterpart is inverse drift (surfaced, never absorbed into the spec). The trace form is the stack skill's call (an `r1_2…` method, a `@requirement R1.2` JavaDoc tag on the test, a system-test or Playwright name); SBCE only requires the id be grep-visible.
 - **Optional `why`.** Any `Rn.m` statement (or boundary op) may carry a trailing `_(why: …)_` — terse *origin/intent* for the rule. **Rationale, not contract**: non-verified (the oracle ignores it), **not a trace target** (the statement still needs its test; a `why` is never drift), and **bound to its id** (retires with the statement, never orphans; the `Rn.m` prefix stays first so id-grep is unaffected). Capture *why the rule exists*, never *how it currently works* — immutable origin, not a description to re-sync.
+- **Optional `## References`.** Links to **external** specifications the BC implements or must conform to — an RFC, a Jakarta/MicroProfile spec chapter, a standard, a regulation, a product document. One bullet per link: `- [<title>](<url>) — <what it governs here>`, optionally scoped to ids (`governs R2`). Rationale, not contract: no id, no test, not a trace target, ignored by the oracle. The link **informs** requirements, it never replaces them — behaviour the BC must exhibit is still an EARS `Rn.m` (a reference is never an excuse for an untested "shall conform to X"). The stack skill may read the linked document while closing the gap (`microprofile-server` follows JavaDoc links to external specs for code generation). Prefer stable, versioned URLs; a reference nobody cites from a `why`, a `Dn`, or a requirement group is noise — drop it.
 - The `control` layer is implementation — pure *how* — so it has **no spec section**; only `## Boundary`, `## Requirements`, and `## Entities` map to code.
 - Stack-neutral throughout: no types, transports, framework verbs, or *how*.
 

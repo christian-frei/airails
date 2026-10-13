@@ -28,9 +28,13 @@ install these alongside it (all ship via airails `installSkills`):
 - [`ears-tests`](../ears-tests) — the EARS→table-driven test transform; turns each `Rn.m` into one labeled row, preserving the spec↔test trace. Its `review` mode is the gate `new --from` runs before authoring anything.
 - [`ears-onepager`](../ears-onepager) — renders a capability spec, or the whole system from the declared `## Components` wiring, as an Excalidraw one-pager plus a printable PDF. Reads the specs, never edits them.
 - [`ears-spec`](../ears-spec) — the business-facing authoring skill on the **other side of the handover**. Product owners and requirement engineers install it (plus `ears-tests`) and nothing else; it produces the feature request `new --from` ingests, and never sees BCE, stacks, or package docs.
+- [`capability-brief`](../capability-brief) *(optional, upstream)* — a use case or user story
+  completed with the domain owner, so `new` authors the spec in one shot instead of interviewing.
 - a **stack skill** — a technology-specific *implementation* of the `bce` principles, adding
-  code idioms *and* verification: [`java-cli-app`](../java-cli-app)
+  code idioms *and* verification: [`java-cli-script`](../../java/java-cli-script)
+  (single-file Boundary/Control/Entity layer grouping), [`java-cli-app`](../java-cli-app)
   (`zunit`/`zb`), [`microprofile-server`](../microprofile-server) (integration + system tests),
+  [`aws-cdk`](../aws-cdk) (synthesis tests + parameterized JUnit 5 rows),
   [`web-components`](../../web/web-components) (system tests + Playwright), or
   [`web-static`](../../web/web-static) / [`web-sprinkles`](../../web/web-sprinkles)
   (`checks.md` manifest + Chrome DevTools / Lighthouse).
@@ -44,10 +48,13 @@ graph TD
     BCE([bce<br>architecture contract])
     EARS([ears-tests<br>EARS→table-driven tests])
     SPEC([ears-spec<br>business-authored feature request])
+    Brief([capability-brief<br>use case / user story])
 
     subgraph StackSkills[stack skills]
+        JavaScript([java-cli-script])
         JavaCli([java-cli-app])
         MicroProfile([microprofile-server])
+        AwsCdk([aws-cdk])
         WebComponents([web-components])
         WebStatic([web-static])
         WebSprinkles([web-sprinkles])
@@ -55,11 +62,14 @@ graph TD
 
     SPEC -->|"--from (intake)"| SBCE
     SPEC -->|check| EARS
+    Brief -->|one-shot input to new| SBCE
     SBCE -->|relies on| BCE
     SBCE -->|delegates spec→test| EARS
     SBCE -->|"are you green?"| StackSkills
+    JavaScript -->|implements| BCE
     JavaCli -->|implements| BCE
     MicroProfile -->|implements| BCE
+    AwsCdk -->|implements| BCE
     WebComponents -->|implements| BCE
     WebStatic -->|implements| BCE
     WebSprinkles -->|implements| BCE
@@ -69,11 +79,13 @@ graph TD
     classDef transform fill:#e1d5e7,stroke:#9673a6,color:#000
     classDef stack fill:#fff2cc,stroke:#d6b656,color:#000
     classDef intake fill:#f8cecc,stroke:#b85450,color:#000
+    classDef intent fill:#ffe6cc,stroke:#d79b00,color:#000
     class SBCE workflow
+    class Brief intent
     class BCE contract
     class EARS transform
     class SPEC intake
-    class JavaCli,MicroProfile,WebComponents,WebStatic,WebSprinkles stack
+    class JavaScript,JavaCli,MicroProfile,AwsCdk,WebComponents,WebStatic,WebSprinkles stack
 ```
 
 ## Usage
@@ -89,7 +101,10 @@ capability", "converge this BC to its spec"). Run the lifecycle in order:
    where the carving is already decided. Both land on the same artifact: one spec per BC.
    If the input is vague, `new` first **loops clarifying questions until no boundary op or EARS
    requirement has to be guessed** — the spec is the test oracle, so it's never invented from
-   ambiguity. A BC name then writes the spec into the BC's package doc
+   ambiguity. A **brief** — a use case or user story authored with
+   [capability-brief](../capability-brief) — is that loop already run with the domain owner:
+   `new` treats its `## Capability` as the confirmed carving and asks only what its `## Open issues`
+   lists. A BC name then writes the spec into the BC's package doc
    (`package-info.java` as `///` Markdown, or `package-info.md` in web) and asks the stack skill to
    scaffold the BC's `boundary/control/entity` dirs. A feature description scans existing BCs,
    proposes a set (new ones + existing to extend) for you to confirm, then authors/extends one
@@ -121,6 +136,14 @@ spec as source of truth, the stack's test loop as oracle).
 
   Feature declaration (intent-level — PM/BA or dev): decompose the description into BCs (new +
   existing to extend), confirm the carving, then author one package-doc spec per BC.
+
+- `/sbce new shop-brief.md`
+
+  One-shot declaration from a brief (intent-level — PM/BA): the use case or user story was
+  completed with [capability-brief](../capability-brief) — `/capability-brief uc "…"` or
+  `/capability-brief story "…"` — and read by its author, so the clarify loop is skipped and only
+  the brief's `## Open issues` are asked. Two commands on purpose: the pause between them is the
+  domain owner's sign-off.
 
 - `/sbce new`
 
