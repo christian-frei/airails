@@ -154,6 +154,10 @@ Migrate legacy, overengineered enterprise systems — Java or web — onto a mod
 - [**mermaid**](documentation/mermaid) — Mermaid overview diagrams for architecture and component visualization
 - [**readme**](documentation/readme) — Conventions for writing README.md files targeting advanced developers
 
+### Design
+
+- [**lcars**](design/lcars) — Composable LCARS-style UI design rules: palette and colour roles, condensed typography, elbows, bars and pills, layout grammar, states, accessibility, and rendering recipes for CSS and immediate-mode drawing; composes with a stack skill such as web-components or web-conventions
+
 ### Quickstarters
 
 - [**quarkus-microprofile**](https://github.com/AdamBien/quarkus-microprofile) — Quarkus MicroProfile template with BCE architecture, REST endpoints, CDI, and System Tests
