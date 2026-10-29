@@ -13,8 +13,8 @@ spec is the boundary contract. One slash-invocable skill, two modes: `new → ap
   - **apply** (converge) — close the gap between spec and BC, then loop the stack's test suite until green (the kubectl/terraform "make it so" step)
 - The identity is the **BC name** (`checkout`); the spec **is** the BC's package doc, co-located with the code — Java: `package-info.java` (`///` Markdown, [JEP 467](https://openjdk.org/jeps/467)), web: `package-info.md`. No separate `specs/` tree
 - **Parallel by construction** — spec, code, and tests live in the BC's own package, and the task list is *read* as the spec↔code gap, never persisted. Teams converge distinct BCs concurrently with no central spec tree, tasks file, or merge-back step to serialize on; coordination concentrates in the one shared artifact — the system doc — exactly where cross-BC coupling is declared
-- An **optional system doc** one altitude up — the base package's `package-info` — holds cross-BC concerns that have no other home: a one-line charter, an optional aspirational vision, the concrete BC-to-BC wiring and integration events, system-wide invariants, the **ubiquitous language** (shared domain nouns defined once — name plus one-line intent, no fields, no types — so each BC's `## Entities` stays terse), an append-only **decision log** (`Dn` — confirmed choices with their rejected alternatives, so later runs never re-litigate them), and the composed stack. Add it only when a real cross-cutting concern appears; a one-BC system needs none. Template: [references/system-doc-template.md](references/system-doc-template.md)
-- An **optional top-level `README.md`** — a human on-ramp that *projects* the specs: a generated block (charter, vision, BC map) regenerated on `apply` inside `<!-- sbce:generated -->` markers, plus hand-maintained sections no spec covers (`## Conventions` for project-local standards, build/run via the stack skill). Never a source of truth. It also **doubles as the optional inception seed** `/sbce new` (no argument) reads to bootstrap the vision and specs. Template: [references/readme-template.md](references/readme-template.md)
+- An **optional system doc** one altitude up — the base package's `package-info` — holds cross-BC concerns that have no other home: a one-line mission, an optional aspirational vision, the concrete BC-to-BC wiring and integration events, system-wide invariants, the **ubiquitous language** (shared domain nouns defined once — name plus one-line intent, no fields, no types — so each BC's `## Entities` stays terse), an append-only **decision log** (`Dn` — confirmed choices with their rejected alternatives, so later runs never re-litigate them), and the composed stack. Add it only when a real cross-cutting concern appears; a one-BC system needs none. Template: [references/system-doc-template.md](references/system-doc-template.md)
+- An **optional top-level `README.md`** — a human on-ramp that *projects* the specs: a generated block (mission, vision, BC map) regenerated on `apply` inside `<!-- sbce:generated -->` markers, plus hand-maintained sections no spec covers (`## Conventions` for project-local standards, build/run via the stack skill). Never a source of truth. It also **doubles as the optional inception seed** `/sbce new` (no argument) reads to bootstrap the vision and specs. Template: [references/readme-template.md](references/readme-template.md)
 - Stack-neutral — owns only the workflow and the spec↔BC mapping; no transport, types, or framework verbs in a spec
 - No binary required: the **stack's own test loop is the oracle for "done"**.
 ## Composition
@@ -30,6 +30,9 @@ install these alongside it (all ship via airails `installSkills`):
 - [`ears-spec`](../ears-spec) — the business-facing authoring skill on the **other side of the handover**. Product owners and requirement engineers install it (plus `ears-tests`) and nothing else; it produces the feature request `new --from` ingests, and never sees BCE, stacks, or package docs.
 - [`capability-brief`](../capability-brief) *(optional, upstream)* — a use case or user story
   completed with the domain owner, so `new` authors the spec in one shot instead of interviewing.
+- [`system-brief`](../system-brief) *(optional, further upstream)* — the mission, actors and the
+  carving into capabilities, confirmed with the stakeholders once; each capability line feeds
+  `capability-brief`, the rest seeds the system doc.
 - a **stack skill** — a technology-specific *implementation* of the `bce` principles, adding
   code idioms *and* verification: [`java-cli-script`](../../java/java-cli-script)
   (single-file Boundary/Control/Entity layer grouping), [`java-cli-app`](../java-cli-app)
@@ -38,6 +41,18 @@ install these alongside it (all ship via airails `installSkills`):
   [`web-components`](../../web/web-components) (system tests + Playwright), or
   [`web-static`](../../web/web-static) / [`web-sprinkles`](../../web/web-sprinkles)
   (`checks.md` manifest + Chrome DevTools / Lighthouse).
+
+Read as a whole, the composition is a stepwise refinement from one system down to its code: each
+skill adds one kind of decision and specializes, never contradicts, the ones above it. All but the
+last are stack-neutral, so the stack skill is interchangeable.
+
+| Skill | Term | Question | Commits to | Neutral to |
+|---|---|---|---|---|
+| [`system-brief`](../system-brief) | Purpose | Why this system, for which actors, which capabilities | mission, vision, actors, scope boundary, capability list, success measures | a capability's inside, structure and stack |
+| [`capability-brief`](../capability-brief) | Intent | Why, for whom | actors, outcome, failures | structure and stack |
+| `sbce` | Contract | What is promised | EARS statements, operations, entities; one capability is one BC | structure rules and stack |
+| [`bce`](../bce) | Structure | Where it lives, and what makes the cut good | BC per responsibility, layer semantics, cohesion and coupling rules, entity requirements, naming | stack |
+| stack skill, e.g. [`microprofile-server`](../microprofile-server), [`web-components`](../../web/web-components), [`java-cli-app`](../java-cli-app), [`aws-cdk`](../aws-cdk) | Realization | How it is built | runtime, layout, build, test loop | nothing |
 
 `sbce` never names a runner or a test kind; it asks the stack skill "are you green?". The spec
 format and rules live in [SKILL.md](SKILL.md).
@@ -49,6 +64,7 @@ graph TD
     EARS([ears-tests<br>EARS→table-driven tests])
     SPEC([ears-spec<br>business-authored feature request])
     Brief([capability-brief<br>use case / user story])
+    System([system-brief<br>mission + carving])
 
     subgraph StackSkills[stack skills]
         JavaScript([java-cli-script])
@@ -62,6 +78,8 @@ graph TD
 
     SPEC -->|"--from (intake)"| SBCE
     SPEC -->|check| EARS
+    System -->|one line per capability| Brief
+    System -->|mission, language, decisions| SBCE
     Brief -->|one-shot input to new| SBCE
     SBCE -->|relies on| BCE
     SBCE -->|delegates spec→test| EARS
@@ -80,8 +98,10 @@ graph TD
     classDef stack fill:#fff2cc,stroke:#d6b656,color:#000
     classDef intake fill:#f8cecc,stroke:#b85450,color:#000
     classDef intent fill:#ffe6cc,stroke:#d79b00,color:#000
+    classDef purpose fill:#f8cecc,stroke:#b85450,color:#000
     class SBCE workflow
     class Brief intent
+    class System purpose
     class BCE contract
     class EARS transform
     class SPEC intake
