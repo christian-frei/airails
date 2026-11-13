@@ -9,8 +9,9 @@ stack is not captured here — if none is declared in the repository, say so und
 How the sections become downstream artifacts:
 System           -> the system doc's title, `>` mission line and `## Vision`
 Actors           -> the `primary` and `external` actors of each capability brief
-Capabilities     -> one `/capability-brief` input per line; name and tag become its `name`
-                    and `kind`; the proposed BC set `/sbce new` confirms
+Capabilities     -> one `/capability-brief` input per `new` or `extends` line; name and tag
+                    become its `name` and `kind`; `existing` lines complete the assembly only;
+                    the proposed BC set `/sbce new` confirms
 Interactions     -> the system doc's `## Components` wiring, proposed
 Language         -> the system doc's `## Ubiquitous language`
 Invariants       -> candidates for the system doc's `## System invariants`, written as EARS by sbce
@@ -18,6 +19,19 @@ Success measures -> rationale only: justifies the carving and the build order; f
 Out of scope     -> closes scope questions in every capability brief
 Decisions        -> the system doc's `Dn` log with rejected alternatives
 Open issues      -> the only questions asked downstream about the system
+
+Standards each section adopts (definitions in standards.md; the terms stay out of the brief):
+System           -> BMM Mission and Vision
+Actors           -> UML Use Case primary and supporting Actors against the Subject, the system
+Capabilities     -> ArchiMate Capability, a capability map; Cockburn kite/cloud level
+Interactions     -> DDD context map: upstream/downstream and what crosses
+Language         -> DDD ubiquitous language
+Invariants       -> ArchiMate Principle
+Success measures -> ArchiMate Outcome
+Out of scope     -> ISO/IEC/IEEE 29148 system boundary and exclusions
+Decisions        -> ISO/IEC/IEEE 42010 decision with rationale and rejected alternatives
+Open issues      -> ISO/IEC/IEEE 42010 unresolved stakeholder concern
+The whole brief  -> a 29148 Stakeholder Requirements Specification at inception size
 
 Use: run `/capability-brief "<one-liner>"` per capability in build order, then `/sbce new`; or
 paste the body into the README outside the `sbce:generated` markers as the inception seed.
@@ -35,11 +49,13 @@ systems the assembly relies on but does not own, each with what for -->
 - external: <e.g. "the payroll system"> — <what the assembly relies on it for>
 
 ## Capabilities
-<!-- one line each, in build order; one lowercase word, tagged new or existing; one sentence naming
+<!-- one line each, in build order; one lowercase word, tagged new, extends or existing; one sentence naming
 the primary actor and the outcome the system promises; no operations, inputs, steps or screens —
-those belong to the capability's own brief. The first line states why it is first. -->
-1. `<name>` — new | existing — <primary actor> <achieves outcome>; the system <promises …>. _(first: <why>)_
-2. `<name>` — new | existing — …
+those belong to the capability's own brief. The first line states why it is first. `new`: a
+capability to build; `extends`: an existing capability that gains this outcome, the line
+describes the addition; `existing`: reused as it is, no brief needed. -->
+1. `<name>` — new | extends | existing — <primary actor> <achieves outcome>; the system <promises …>. _(first: <why>)_
+2. `<name>` — new | extends | existing — …
 
 ## Interactions
 <!-- only between listed capabilities and external systems; direction and what crosses; or

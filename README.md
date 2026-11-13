@@ -11,39 +11,59 @@ Home of Spec-Driven BCE ([**sbce.space**](https://sbce.space)) — development c
 
 ## Installation
 
-Download the repository without `git`, then run the installer:
+The `airails` wizard selects, downloads, and installs released skill bundles in one shot — globally into the home directory, or into one project so the skills are checked in with it. It needs a JDK 25+ and asks for scope, agents, and bundles; every answer can be given as a flag instead, which is how agents and CI run it:
 
 ```
-curl -fsSL https://raw.githubusercontent.com/AdamBien/airails/main/downloadSkills | java --source 25 /dev/stdin
-cd airails
-./installSkills
+curl -fsSL https://raw.githubusercontent.com/AdamBien/airails/main/airails | java --source 25 /dev/stdin
 ```
 
-Or clone it with `git` instead of the first step:
+```
+cd <project-root>
+curl -fsSL https://raw.githubusercontent.com/AdamBien/airails/main/airails | java --source 25 /dev/stdin -project . -agents claude -bundles web,sbce -yes
+```
+
+`-list` lists the released bundles, `-help` the options; values take either form, `-project .` or `-project:.`. The wizard installs the last release only; it never touches a clone. Supported agents and their skills directories:
+
+| Agent | Global | Project-local |
+|---|---|---|
+| claude | `~/.claude/skills` | `.claude/skills` |
+| vibe | `~/.vibe/skills` | `.vibe/skills` |
+| kiro | `~/.kiro/skills` | `.kiro/skills` |
+| copilot | `~/.copilot/skills` | `.github/skills` |
+| codex | `~/.agents/skills` | `.agents/skills` |
+| goose | `~/.config/goose/skills` | `.agents/skills` |
+
+A project skill takes precedence over a global skill of the same name.
+
+### Bundles
+
+Bundles are agent-neutral subsets, one zip per bundle in the rolling [skills release](https://github.com/AdamBien/airails/releases/tag/skills). The stack bundles share a core of bce, bce-reviewer, system-tests, and the `documentation` skills (readme, bce-diagrams, mermaid, drawio), and add the stack skill, its building blocks, conventions, and test loop, so a web project does not carry the Java or migration skills in its context. The `fullstack` bundle is the one horizontal cut: the `sbce`, `documentation`, `java-server`, and `web` bundles in a single install, derived from them so it cannot drift. The `sbce` bundle is an add-on for any stack; `documentation` is part of every stack bundle and also published standalone for custom installs; `skills` holds every skill.
+
+| Bundle | Contents |
+|---|---|
+| `java-server` | core + microprofile-server, continuous-testing, aws-cdk, java-conventions, concerns, jdbc-persistence, memory-persistence |
+| `java-cli` | core + java-cli-app, java-cli-script, java-conventions, concerns, zb, zb-release-pipeline, zargs, zcfg, zcl, zjson, zunit, zhtmldb, zllm-scripts, jdbc-persistence, memory-persistence |
+| `web` | core + web-conventions, javascript-conventions, web-static, web-sprinkles, web-components, web-system-tests, web-latest, web-pwa, web-performance-reviewer, web-standards-reviewer |
+| `migrations` | core + migration-advisor, concept-extractor, concept-clarifier, bc-carver, concept-annotator, characterization-tests, simplifier, java-conventions, concerns, java-distiller, python-to-java |
+| `fullstack` | `sbce` + `documentation` + `java-server` + `web` — from system brief to a running, documented backend and frontend |
+| `sbce` | sbce, ears-tests, capability-brief, system-brief — the spec-driven workflow on top of a stack bundle |
+| `documentation` | readme, bce-diagrams, mermaid, drawio — inside every stack bundle's core, standalone for custom installs |
+| `skills` | every skill |
+
+Bundles overlap by design; installing two writes identical files twice. The manifest lives in `bundles()` of [zipSkills](zipSkills), which CI runs to publish the release; the wizard reads the bundle names from the release, so a new bundle shows up there after the next release build.
+
+### From a Clone
+
+To install the `main` working tree rather than the last release — when contributing, or to pick up a change before CI released it — clone the repository and run the interactive installer. It copies every skill and prompts per agent directory:
 
 ```
 git clone https://github.com/AdamBien/airails
 cd airails
-./installSkills
+./installSkills                    # global
+./installSkills -p ../myproject    # project-local
 ```
 
-The installer finds all skills and prompts before copying to each supported agent directory (`~/.claude/skills`, `~/.vibe/skills`, `~/.kiro/skills`, `~/.copilot/skills`, `~/.agents/skills`, `~/.config/goose/skills`).
-
-Without a JDK or `git`, download the prepacked zip for your agent from the rolling [skills release](https://github.com/AdamBien/airails/releases/tag/skills) and unzip it into the home directory:
-
-```
-curl -fsSLO https://github.com/AdamBien/airails/releases/download/skills/airails-claude.zip
-unzip -o airails-claude.zip -d ~
-```
-
-Each zip contains all skills with the agent's skills directory baked into the entry paths: `airails-claude.zip`, `airails-vibe.zip`, `airails-kiro.zip`, `airails-copilot.zip`, `airails-codex.zip`, `airails-goose.zip`. The agent-neutral `airails-skills.zip` holds the same skills under a plain `skills/` prefix — unzip it into any agent's configuration directory or a custom location:
-
-```
-curl -fsSLO https://github.com/AdamBien/airails/releases/download/skills/airails-skills.zip
-unzip -o airails-skills.zip -d ~/.claude
-```
-
-AI agents installing the skills themselves should follow [AGENTS.md](AGENTS.md) — `installSkills` requires an interactive terminal.
+The zip release and agent-specific install paths are described in [AGENTS.md](AGENTS.md) — AI agents installing the skills themselves should follow it, since `installSkills` requires an interactive terminal.
 
 **✦** Product owners and requirement engineers need only two of these skills. `./installSpecSkills`
 installs `ears-spec` and `ears-tests` and nothing else — no JDK, no build, no interactive terminal,
@@ -63,6 +83,31 @@ Manage installed skills:
 ./installSkills -h           # show help
 ```
 
+Add `-p <project-root>` to list or delete within a project instead of the home directory. Single skills are plain directory copies:
+
+```
+cp -R web/web-conventions <project-root>/.claude/skills/
+```
+
+### Without a JDK
+
+Download the prepacked zip for your agent from the [skills release](https://github.com/AdamBien/airails/releases/tag/skills) and unzip it into the home directory:
+
+```
+curl -fsSLO https://github.com/AdamBien/airails/releases/download/skills/airails-claude.zip
+unzip -o airails-claude.zip -d ~
+```
+
+Each per-agent zip contains all skills with the agent's skills directory baked into the entry paths: `airails-claude.zip`, `airails-vibe.zip`, `airails-kiro.zip`, `airails-copilot.zip`, `airails-codex.zip`, `airails-goose.zip`. The bundle zips (`airails-web.zip`, …, `airails-skills.zip`) carry a plain `skills/` prefix instead — unzip them into the agent's configuration directory, the parent of its skills directory, globally or in a project:
+
+```
+curl -fsSLO https://github.com/AdamBien/airails/releases/download/skills/airails-web.zip
+unzip -o airails-web.zip -d ~/.claude
+unzip -o airails-web.zip -d <project-root>/.claude
+```
+
+AI agents installing the skills themselves should follow [AGENTS.md](AGENTS.md).
+
 ## Skill Layers
 
 The skills compose in layers. Each layer fixes one set of decisions; the layers above it ask for that decision instead of making it. A lower layer applies wherever the composed skill is silent, and the composed skill specializes it, never contradicts it. A fixed decision is one the agent does not rediscover per task.
@@ -70,7 +115,7 @@ The skills compose in layers. Each layer fixes one set of decisions; the layers 
 1. **Linguistic** — wording and test shape. [ears-tests](bce/ears-tests): six EARS patterns, each mapping to a fixed precondition/trigger/response tuple; one statement id yields one test row; the subject is always the BC.
 2. **Semantic** — scope and naming. [sbce](bce/sbce): one capability spec equals one BC equals one package; boundary operations are verb-noun and transport-neutral; requirement ids are stable and never renumbered.
 3. **Architectural** — structure and vocabulary. [bce](bce/bce) and [concerns](java/concerns): layer responsibilities, package structure, naming bans.
-4. **Technological** — runtime, layout, build, verification loop. Stack skills: [java-cli-script](java/java-cli-script), [java-cli-app](bce/java-cli-app), [microprofile-server](bce/microprofile-server), [aws-cdk](bce/aws-cdk), [web-static](web/web-static), [web-sprinkles](web/web-sprinkles), [web-components](web/web-components). Building blocks: [zb](java/zb), [zargs](java/zargs), [zcfg](java/zcfg), [zcl](java/zcl), [zjson](java/zjson). Layers 1–3 ask the stack skill where code lands and whether it is green.
+4. **Technological** — runtime, layout, build, verification loop. Stack skills: [java-cli-script](java/java-cli-script), [java-cli-app](bce/java-cli-app), [microprofile-server](bce/microprofile-server), [aws-cdk](bce/aws-cdk), [web-static](web/web-static), [web-sprinkles](web/web-sprinkles), [web-components](web/web-components). Building blocks: [zb](java/zb), [zargs](java/zargs), [zcfg](java/zcfg), [zcl](java/zcl), [zjson](java/zjson), [jdbc-persistence](java/jdbc-persistence), [memory-persistence](java/memory-persistence). Layers 1–3 ask the stack skill where code lands and whether it is green.
 5. **Idiomatic** — syntax and style. [java-conventions](java/java-conventions), [javascript-conventions](web/javascript-conventions), [web-conventions](web/web-conventions): defaults wherever the stack skill is silent.
 6. **Judgment** — the definition of done. [system-tests](bce/system-tests) is the neutral rule, realized by [web-system-tests](web/web-system-tests), [zunit](java/zunit), [continuous-testing](bce/continuous-testing), and [characterization-tests](migrations/characterization-tests). The stack's own test loop is the oracle; the agent never self-certifies convergence.
 
@@ -97,6 +142,8 @@ One capability spec equals one business component, and the spec is the boundary 
 
 - [**java-conventions**](java/java-conventions) — Composable Java 25 code conventions: modern syntax, naming, visibility, streams, and exceptions across all Java contexts
 - [**concerns**](java/concerns) — @Concern marker annotations recording why a class or package exists: starter kinds for observability and external systems, plus admission rules for when a project-specific kind is worth adding
+- [**jdbc-persistence**](java/jdbc-persistence) — Plain JDBC persistence with Data-Oriented Programming: records as row shapes, sealed variants mapped through exhaustive switches, controls with an injected `DataSource` under a `@Transactional` boundary (CLI: static functions over a boundary-owned `Connection`); composes bce, java-conventions, and microprofile-server or java-cli-app
+- [**memory-persistence**](java/memory-persistence) — Records stored in a `ConcurrentHashMap` with stream queries, exposing the same control contract as jdbc-persistence; for prototypes, demos, and the first sbce convergence before a database exists
 - [**java-cli-script**](java/java-cli-script) — Zero-dependency, single-file executable Java scripts for system-wide use via PATH; longer scripts group members into Boundary/Control/Entity interface namespaces (composes bce)
 - [**java-distiller**](java/java-distiller) — Simplifies, modernizes, and refactors existing code into idiomatic Java 25
 - [**python-to-java**](java/python-to-java) — Converts Python scripts to zero-dependency Java 25 CLI programs
