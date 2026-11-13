@@ -60,7 +60,7 @@ names appear in. A bullet with no recognised relation word is reported and left 
 The script cannot tell whether the picture is *right*. Read the output and report:
 
 - A **grey outcome box**: that group has no happy statement. Say so — it is a spec gap, not a drawing bug.
-- A **truncated diamond** (`…`): the condition is too long to sit inside the shape. The full text is in the right column, but a condition needing five lines is usually two statements — offer to split it, and hand it to `/ears-tests review`.
+- A **truncated diamond** (`…`): the condition is too long to sit inside the shape. The full text is in the right column, but a condition needing five lines is usually two statements — offer to split it, and hand it to `/ears-spec check`.
 - **`+n more If…then statement(s)`**: a group with more than three guards is drawn to three. The rest are listed on the right; say which were not drawn.
 - An operation label reading like a group title means the spec's `## Boundary` / `## Operations` and its `## Requirements` groups don't line up one-to-one. Report the mismatch; don't paper over it.
 - More than one printed page: the sheet is scaled to fit A4 landscape, so a very large spec gets small. Suggest `--system` for the overview plus one page per capability.
@@ -85,7 +85,7 @@ anyone who wants a different picture at the spec, or at the script.
 ## Composition
 
 - **`/ears-spec`** and **`/sbce`** own the specs this reads. It never edits them.
-- **`/ears-tests`** owns whether a statement is testable; this owns whether it is *showable*. Run `review` first — a statement it flags will also draw badly.
+- **`/ears-spec check`** owns whether a statement is testable; this owns whether it is *showable*. Run `check` first — a statement it flags will also draw badly.
 - **`/mermaid`**, **`/drawio`**, **`/bce-diagrams`** are for hand-authored architecture diagrams. This one is not hand-authored, and is the only one bound to EARS ids.
 
 Layout contract, colours and how to extend the script: `references/layout.md`.

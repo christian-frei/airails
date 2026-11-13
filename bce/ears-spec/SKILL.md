@@ -1,6 +1,6 @@
 ---
 name: ears-spec
-description: Author a business-readable feature request as a plain Markdown file with EARS requirements — for product owners, business analysts and requirement engineers who hand the file to a development team by e-mail, ticket or repository. Asks business questions only: never about programming languages, frameworks, stacks, databases, transports, deployment, test tooling or code layout. Produces one self-contained `.md` per feature, which the receiving team ingests with `/sbce new --from`. Composes with `/ears-tests review` for a testability check before sending. Use when writing, structuring, revising or handing over a feature request, requirements document or acceptance criteria — with or without a codebase in reach. Triggers on "feature request", "requirements document", "business requirements", "acceptance criteria", "EARS requirements", "requirement engineering", "product owner spec", "spec for the developers", "hand over to the dev team", "user story with acceptance criteria", "write requirements", "review my requirements".
+description: 'Author a business-readable feature request as a plain Markdown file with EARS requirements, for product owners, business analysts and requirement engineers who hand it to a development team by e-mail, ticket or repository. Asks business questions only, never about languages, frameworks, databases, transports, deployment, test tooling or code layout. Produces one self-contained `.md` per feature, which the team turns into specs with `/capability-brief` and `/sbce new`. Includes a stack-free testability check before sending. Use when writing, structuring, revising, checking or handing over a feature request, requirements document or acceptance criteria. Triggers on "feature request", "requirements document", "business requirements", "acceptance criteria", "EARS requirements", "requirement engineering", "product owner spec", "spec for the developers", "hand over to the dev team", "write requirements", "review my requirements", "are these requirements testable".'
 ---
 
 Author one feature request as a plain Markdown file that a development team can build from —
@@ -15,9 +15,9 @@ required to produce it.
 
 - **The author owns the *what*; the team owns the *how*.** Every question this skill asks must be answerable by someone who has never seen the code.
 - **Requirements are [EARS](https://alistairmavin.com/ears/) statements** — one of six patterns, each testable, each carrying a stable id. Prose that cannot be phrased as a statement is context, not a requirement.
-- **The file is intake, not a contract-of-record.** Once the team ingests it, their capability specs become the source of truth; this file is frozen as the record of what the business asked for. It is never kept in sync afterwards — a change means a **new revision, sent again**.
+- **The file is input, not a contract-of-record.** Once the team has authored its capability specs from it, those specs are the source of truth; this file stays the record of what the business asked for. It is never kept in sync afterwards — a change means a **new revision, sent again**.
 - **Nothing is guessed.** An unresolved point goes to `## Open questions`, never into an invented requirement. The team must not have to guess either.
-- **Ids are stable across revisions** — never renumbered on reorder; a withdrawn statement's id is retired, not reused. The team's traceability points back at these ids.
+- **Ids are stable across revisions** — never renumbered on reorder; a withdrawn statement's id is retired, not reused. Questions and answers between author and team quote these ids.
 
 ## Question policy — the core rule
 
@@ -82,11 +82,11 @@ The same rigour as any spec interview, in business words only:
 
 ### check — testability review before sending
 
-Delegate to `/ears-tests review <file>` — the stack-free review that reports, per statement id,
-whether it can become a test: pattern match, measurable response, one trigger per statement,
-missing rejection paths, duplicate or missing ids. It generates no code and asks no technical
-questions. Fix what it flags, or move the point to `## Open questions` if it needs a business
-decision. If `ears-tests` is not installed, ask for it — do not improvise a partial check.
+A stack-free review that reports, per statement id, whether it can become a test: pattern match,
+measurable response, one trigger per statement, missing rejection paths, duplicate or missing ids.
+The checks, their codes and severities, and the report format: `references/review-checklist.md`.
+It generates no code, asks no technical questions, and never rewrites the file. Fix what it flags,
+or move the point to `## Open questions` if it needs a business decision.
 
 ## The file
 
@@ -107,7 +107,7 @@ The six EARS patterns, when to reach for each, and the common mistakes: `referen
 | `## Revisions` | what changed since the previous revision, by id | no |
 
 - **The subject of every statement is "the system"** — the author does not know, and must not invent, how the team will carve the feature up. The receiving team rewrites the subject when it maps statements onto its components.
-- **One language per file.** English is the default; if the file is written in another working language, keep the six EARS keywords and `shall` in English so `/ears-tests review` can still read it.
+- **One language per file.** English is the default; if the file is written in another working language, keep the six EARS keywords and `shall` in English so `check` can still read it.
 - No screens, no field layouts, no wireframes. A requirement about *what must be captured* is business; a requirement about *where the button sits* is design and belongs elsewhere.
 
 ## Sending it
@@ -115,25 +115,24 @@ The six EARS patterns, when to reach for each, and the common mistakes: `referen
 Before the file leaves, confirm all of these — and say plainly which ones fail:
 
 - `status: ready` (a `draft` is fine to circulate, but say so).
-- `/ears-tests review` reports no blockers.
+- `check` reports no blockers.
 - Every operation in `## Operations` is covered by at least one requirement group.
 - Every operation that accepts input has at least one `If…then` statement.
 - `## Open questions` is empty, or every entry names who must decide it.
 
-Then hand over the file itself — attachment, ticket body, or commit. Tell the recipient it is a
-`/sbce new --from <file>` intake document, and that questions come back to the `contact:` address
-quoting statement ids.
+Then hand over the file itself — attachment, ticket body, or commit. Tell the recipient it is
+input for `/capability-brief` and `/sbce new`, and that questions come back to the `contact:`
+address quoting statement ids.
 
 ## What the team does with it (context for the author)
 
-The team runs `/sbce new --from <file>`. It reviews the statements, proposes how the feature
-splits into components, confirms that split with a developer, and authors the resulting capability
-specs into the codebase; each statement becomes at least one test that carries its id. The
-original file is kept, frozen, as the record of the request. The author never sees any of that
-structure — but knows the ids survive, which is why they are stable.
+The team turns the file into one `/capability-brief` per capability it carves out — or hands it
+straight to `/sbce new` as a feature description — and `/sbce new` authors the capability specs
+into the codebase; each statement becomes at least one test. The author never sees any of that
+structure; questions and answers between both sides quote the statement ids, which is why they are
+stable.
 
 ## Composition
 
-- **`/ears-tests`** — the `review` mode used by `check`. Required.
-- **`/sbce`** — the receiving end (`new --from`). Not needed to author a file, and never invoked by this skill.
+- **`/capability-brief`** and **`/sbce`** — the receiving end. Not needed to author a file, and never invoked by this skill.
 - This skill writes **nothing but the one `.md`**: no code, no scaffolding, no repository changes, no diagrams.

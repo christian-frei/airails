@@ -19,8 +19,8 @@ single technical question**.
   unhappy paths (`If … then`) that authors otherwise leave unwritten.
 - **Stable statement ids** (`Rn.m`) that survive revisions, so the receiving team's tests can point
   back at them.
-- Modes: `new` (author), `revise` (change without renumbering), `check` (testability review before
-  sending, delegated to `/ears-tests review`).
+- Modes: `new` (author), `revise` (change without renumbering), `check` (stack-free testability
+  review before sending).
 
 Writes nothing but the one `.md`: no code, no scaffolding, no repository changes.
 
@@ -28,8 +28,8 @@ Writes nothing but the one `.md`: no code, no scaffolding, no repository changes
 
 | Role | Skills |
 |---|---|
-| Product owner, business analyst, requirement engineer | `ears-spec` + `ears-tests` |
-| Development team | the full set — `sbce`, `bce`, `ears-tests`, a stack skill |
+| Product owner, business analyst, requirement engineer | `ears-spec` |
+| Development team | a stack bundle plus the `sbce` bundle — `sbce`, `capability-brief`, `ears-tests`, `bce`, … |
 
 The authoring side never needs `sbce`, `bce`, or any stack skill, and never sees their vocabulary.
 
@@ -39,22 +39,21 @@ The authoring side never needs `sbce`, `bce`, or any stack skill, and never sees
 requirement engineer                    development team
 --------------------                    ----------------
 /ears-spec new "payment release"
-/ears-tests review payment-release.md
-        payment-release.md  ── e-mail ──▶  /sbce new --from payment-release.md
-                                             ├─ /ears-tests review (gate)
-                                             ├─ proposes the component carving, dev confirms
-                                             ├─ authors the capability specs
-                                             └─ freezes the file in specs/inbox/
+/ears-spec check payment-release.md
+        payment-release.md  ── e-mail ──▶  /capability-brief review payment-release.md
+                                             └─ one brief per capability, dev confirms
+                                           /sbce new <brief>
+                                             └─ authors the capability spec
                                            /sbce apply <bc>
 ```
 
-The received file is **intake, not a source of truth**: after ingestion the team's capability specs
-are authoritative, and the frozen copy in `specs/inbox/` is the record of what the business asked
-for. A change is a **new revision, sent again** — never an edit on either side.
+The received file is **input, not a source of truth**: once the team has authored its capability
+specs they are authoritative, and the file stays the record of what the business asked for. A
+change is a **new revision, sent again** — never an edit on either side.
 
 ## Installing it
 
-Requirement engineers install **only this skill and `ears-tests`** — not the other 35. From a clone
+Requirement engineers install **only this skill** — not the other fifty. From a clone
 of this repository:
 
 ```
@@ -62,7 +61,7 @@ of this repository:
 ```
 
 No JDK, no build, no interactive terminal. It detects which agents are present on the machine and
-copies the two skill folders into each of their skills directories; `-a <agent>` targets one
+copies the skill folder into each of their skills directories; `-a <agent>` targets one
 (`claude`, `vibe`, `kiro`, `copilot`, `codex`, `goose`), `-l` lists what is installed, `-u`
 removes it, `-h` explains the rest.
 
@@ -71,9 +70,8 @@ route, not this one.
 
 ## Composition
 
-- [`ears-tests`](../ears-tests) — its `review` mode is this skill's `check`. Required.
-- [`sbce`](../sbce) — the receiving end (`new --from`). Not needed to author a file, and never
-  invoked from here.
+- [`capability-brief`](../capability-brief) and [`sbce`](../sbce) — the receiving end. Not needed
+  to author a file, and never invoked from here.
 
 ## Usage
 
@@ -86,6 +84,7 @@ route, not this one.
 Also triggers from intent — "write a requirements document for …", "turn these meeting notes into
 acceptance criteria", "review my requirements before I send them".
 
-The rules live in [SKILL.md](SKILL.md); the annotated file template with a worked example in
+The rules live in [SKILL.md](SKILL.md); the `check` codes and report format in
+[references/review-checklist.md](references/review-checklist.md); the annotated file template with a worked example in
 [references/feature-request-template.md](references/feature-request-template.md); how to phrase and
 group statements, and the mistakes to avoid, in [references/ears-patterns.md](references/ears-patterns.md).

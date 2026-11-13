@@ -1,8 +1,7 @@
 #!/bin/sh
-# installSpecSkills — install only the requirement-engineering skills:
+# installSpecSkills — install only the requirement-engineering skill:
 #
-#   ears-spec    author a feature request with EARS requirements, business questions only
-#   ears-tests   check those requirements are testable before sending them
+#   ears-spec    author and check a feature request with EARS requirements, business questions only
 #
 # For product owners, business analysts and requirement engineers. No JDK, no build,
 # no interactive terminal required — unlike ./installSkills, which installs everything.
@@ -13,7 +12,7 @@ set -eu
 
 VERSION="2026-08-26.1"
 NAME="$(basename "$0")"
-SKILLS="ears-spec ears-tests"
+SKILLS="ears-spec"
 SKILL_ROOT="bce"
 
 AGENTS="claude vibe kiro copilot codex goose"
@@ -47,7 +46,7 @@ help() {
     cat <<USAGE
 $NAME $VERSION
 
-Installs the two requirement-engineering skills ($SKILLS) and nothing else.
+Installs the requirement-engineering skill ($SKILLS) and nothing else.
 
 Usage:
   ./$NAME              install for every agent found on this machine (claude if none)

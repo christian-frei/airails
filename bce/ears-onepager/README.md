@@ -47,8 +47,8 @@ browser, open the generated HTML and use Print → Save as PDF.
 ## Composition
 
 - [`ears-spec`](../ears-spec) and [`sbce`](../sbce) own the specs this reads; it never edits them.
-- [`ears-tests`](../ears-tests) decides whether a statement is *testable*; this one shows whether it
-  is *showable*. Run `/ears-tests review` first — anything it flags also draws badly.
+- [`ears-spec`](../ears-spec)'s `check` decides whether a statement is *testable*; this one shows
+  whether it is *showable*. Run `/ears-spec check` first — anything it flags also draws badly.
 - [`mermaid`](../../documentation/mermaid), [`drawio`](../../documentation/drawio) and
   [`bce-diagrams`](../../documentation/bce-diagrams) are for hand-authored architecture diagrams.
   This one is generated, and is the only one bound to EARS statement ids.

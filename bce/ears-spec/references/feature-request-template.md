@@ -6,10 +6,10 @@ the file and nothing else — no repository, no ticket system, no meeting memory
 Rules for filling it in:
 
 - **Business only.** No language, framework, database, protocol, deployment, module or class names anywhere. If the author states one anyway, it goes under `## Constraints` verbatim — never into a requirement.
-- **The subject of every statement is "the system".** The author does not decide how the team carves the feature into components; the team rewrites the subject on intake.
+- **The subject of every statement is "the system".** The author does not decide how the team carves the feature into components; the team rewrites the subject when it authors its specs.
 - **Every requirement is an EARS statement** with a stable id `Rn.m` — see `ears-patterns.md`. One trigger, one response, per statement.
 - **Ids are stable across revisions.** Never renumber on reorder. A withdrawn statement's id is retired, not reused; a changed statement keeps its id.
-- **`## Constraints` and `## Open questions` carry no `Rn` ids** — they are not requirements and are never tested. Constraints use `Cn`, open questions `Qn`, both stable across revisions so the receiving team's intake map can name them.
+- **`## Constraints` and `## Open questions` carry no `Rn` ids** — they are not requirements and are never tested. Constraints use `Cn`, open questions `Qn`, both stable across revisions so the receiving team can name them in questions.
 - **Keep `## Out of scope`, even when empty.** It is what stops the team from inventing the boundary.
 - Optional `_(why: …)_` on a statement: the rule's *origin* — a regulation, an incident, a policy. Terse. It is never tested, and never describes how anything works today.
 
