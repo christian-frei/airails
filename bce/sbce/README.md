@@ -9,7 +9,6 @@ spec is the boundary contract. One slash-invocable skill, two modes: `new → ap
 
 - One skill, two modes — invoke as `/sbce new|apply <capability-or-feature>` (or by intent):
   - **new** (declare) — author the spec into the BC's package doc (`package-info.java` / `package-info.md`) and scaffold the BC's empty `boundary/control/entity` dirs. Accepts a BC name (one precise spec) **or** a natural-language feature description that decomposes into one or several BCs — coining new ones or extending existing specs, after you confirm the carving
-  - **new `--from <file>`** *(added in this fork)* — ingest a business-authored EARS feature request written with [`ears-spec`](../ears-spec) and delivered by e-mail or ticket: gate it on `/ears-tests review`, carve it into BCs (you confirm), author the specs, record where every business statement landed — including the ones not built — in an **intake map** beside the frozen request under `specs/inbox/`. The received file is intake, never a source of truth — a change on the business side is a new revision, sent again
   - **apply** (converge) — close the gap between spec and BC, then loop the stack's test suite until green (the kubectl/terraform "make it so" step)
 - The identity is the **BC name** (`checkout`); the spec **is** the BC's package doc, co-located with the code — Java: `package-info.java` (`///` Markdown, [JEP 467](https://openjdk.org/jeps/467)), web: `package-info.md`. No separate `specs/` tree
 - **Parallel by construction** — spec, code, and tests live in the BC's own package, and the task list is *read* as the spec↔code gap, never persisted. Teams converge distinct BCs concurrently with no central spec tree, tasks file, or merge-back step to serialize on; coordination concentrates in the one shared artifact — the system doc — exactly where cross-BC coupling is declared
@@ -25,9 +24,7 @@ install these alongside it (all ship via airails `installSkills`):
 
 - [`bce`](../bce) — the technology-neutral architecture contract (BCE layering, naming) every
   spec and BC is held against.
-- [`ears-tests`](../ears-tests) — the EARS→table-driven test transform; turns each `Rn.m` into one labeled row, preserving the spec↔test trace. Its `review` mode is the gate `new --from` runs before authoring anything.
-- [`ears-onepager`](../ears-onepager) — renders a capability spec, or the whole system from the declared `## Components` wiring, as an Excalidraw one-pager plus a printable PDF. Reads the specs, never edits them.
-- [`ears-spec`](../ears-spec) — the business-facing authoring skill on the **other side of the handover**. Product owners and requirement engineers install it (plus `ears-tests`) and nothing else; it produces the feature request `new --from` ingests, and never sees BCE, stacks, or package docs.
+- [`ears-tests`](../ears-tests) — the EARS→table-driven test transform; turns each `Rn.m` into one labeled row, preserving the spec↔test trace.
 - [`capability-brief`](../capability-brief) *(optional, upstream)* — a use case or user story
   completed with the domain owner, so `new` authors the spec in one shot instead of interviewing.
 - [`system-brief`](../system-brief) *(optional, further upstream)* — the mission, actors and the
@@ -62,7 +59,6 @@ graph TD
     SBCE([sbce<br>workflow + spec↔BC mapping])
     BCE([bce<br>architecture contract])
     EARS([ears-tests<br>EARS→table-driven tests])
-    SPEC([ears-spec<br>business-authored feature request])
     Brief([capability-brief<br>use case / user story])
     System([system-brief<br>mission + carving])
 
@@ -76,8 +72,6 @@ graph TD
         WebSprinkles([web-sprinkles])
     end
 
-    SPEC -->|"--from (intake)"| SBCE
-    SPEC -->|check| EARS
     System -->|one line per capability| Brief
     System -->|mission, language, decisions| SBCE
     Brief -->|one-shot input to new| SBCE
@@ -96,7 +90,6 @@ graph TD
     classDef contract fill:#d5e8d4,stroke:#82b366,color:#000
     classDef transform fill:#e1d5e7,stroke:#9673a6,color:#000
     classDef stack fill:#fff2cc,stroke:#d6b656,color:#000
-    classDef intake fill:#f8cecc,stroke:#b85450,color:#000
     classDef intent fill:#ffe6cc,stroke:#d79b00,color:#000
     classDef purpose fill:#f8cecc,stroke:#b85450,color:#000
     class SBCE workflow
@@ -104,7 +97,6 @@ graph TD
     class System purpose
     class BCE contract
     class EARS transform
-    class SPEC intake
     class JavaScript,JavaCli,MicroProfile,AwsCdk,WebComponents,WebStatic,WebSprinkles stack
 ```
 

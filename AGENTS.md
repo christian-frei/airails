@@ -2,7 +2,7 @@
 
 Instructions for AI agents asked to install, list, or remove the skills in this repository.
 
-A skill is a directory containing a `SKILL.md`, organized under `bce/`, `java/`, `web/`, `migrations/`, `documentation/`, and `design/`. Installation means placing the skill directory — preserving its folder name — into the skills directory of the target agent, either globally (home directory) or project-locally (project root, checked in with the project).
+A skill is a directory containing a `SKILL.md`, organized under `bce/`, `java/`, `web/`, `migrations/`, and `documentation/`. Installation means placing the skill directory — preserving its folder name — into the skills directory of the target agent, either globally (home directory) or project-locally (project root, checked in with the project).
 
 ## Skill Directories per Agent
 
